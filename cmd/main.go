@@ -6,10 +6,16 @@ import (
 	"path/filepath"
 
 	"github.com/gin-gonic/gin"
+	"github.com/kienpham07/GoLog/database"
 )
 
 func main() {
+	// 1. Initialize the Database connection
+	database.Connect()
+
+	// 2. Set up the Gin router
 	router := gin.Default()
+	router.MaxMultipartMemory = 8 << 20
 
 	// Limit the maximum memory for file uploads to 8 MB to prevent server crashes from massive files.
 	router.MaxMultipartMemory = 8 << 20
