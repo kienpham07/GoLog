@@ -13,6 +13,7 @@ import (
 func main() {
 	// 1. Initialize the Database connection
 	database.Connect()
+	database.InitSchema()
 
 	// 2. Set up the Gin router
 	router := gin.Default()
@@ -63,10 +64,12 @@ func main() {
 			return
 		}
 
-		// Print the results to the terminal to verify it works
-		log.Printf("Successfully parsed %d log entries!\n", len(parsedLogs))
-		for _, entry := range parsedLogs {
-			log.Printf("Parsed: %+v\n", entry)
+		// Save the parsed logs to the database!
+		err = database.InsertLogEntries(parsedLogs)
+		if err != nil {
+			log.Println("Error saving to database:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save logs to database"})
+			return
 		}
 
 		// Return a success response

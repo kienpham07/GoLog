@@ -28,5 +28,24 @@ func Connect() {
 		log.Fatal("Error connecting to the database: ", err)
 	}
 
-	fmt.Println("✅ Successfully connected to PostgreSQL!")
+	fmt.Println("Successfully connected to PostgreSQL!")
+}
+
+// InitSchema ensures our database tables exist before the app starts running
+func InitSchema() {
+	query := `
+	CREATE TABLE IF NOT EXISTS logs (
+		id SERIAL PRIMARY KEY,
+		ip VARCHAR(50),
+		method VARCHAR(10),
+		endpoint TEXT,
+		status INTEGER,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	_, err := DB.Exec(query)
+	if err != nil {
+		log.Fatal("Failed to initialize database schema: ", err)
+	}
+	fmt.Println("✅ Database schema initialized!")
 }
