@@ -25,3 +25,27 @@ func InsertLogEntries(entries []models.LogEntry) error {
 
 	return nil
 }
+
+// GetLogs retrieves the most recent 100 log entries from the database
+// Reading log data from PostgreSQL database and returning it as a Go slice.
+func GetLogs() ([]models.LogEntry, error) {
+	// Query the database, ordering by newest first
+	rows, err := DB.Query("SELECT ip, method, endpoint, status FROM logs ORDER BY created_at DESC LIMIT 100")
+	if err != nil {
+		return nil, fmt.Errorf("failed to query logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []models.LogEntry
+
+	// Loop through the result set
+	for rows.Next() {
+		var entry models.LogEntry
+		if err := rows.Scan(&entry.IP, &entry.Method, &entry.Endpoint, &entry.Status); err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		logs = append(logs, entry)
+	}
+
+	return logs, nil
+}

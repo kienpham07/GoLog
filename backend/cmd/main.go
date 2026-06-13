@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kienpham07/GoLog/backend/database"
 	"github.com/kienpham07/GoLog/backend/services"
@@ -17,10 +18,18 @@ func main() {
 
 	// 2. Set up the Gin router
 	router := gin.Default()
+
+	// Enable CORS for the frontend
+	router.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"http://localhost:3000"},            //Next.js port
+		AllowMethods: []string{"GET", "POST", "OPTIONS"},           // Identify which kinds of requests are allowed for FE
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept"}, // Identify HTTP Headers permitted in request
+	}))
+
 	router.MaxMultipartMemory = 8 << 20
 
 	// Limit the maximum memory for file uploads to 8 MB to prevent server crashes from massive files.
-	router.MaxMultipartMemory = 8 << 20
+	router.MaxMultipartMemory = 8 << 20 // 8 x 2^20 byte = 8MB
 
 	// GET health-check endpoint
 	router.GET("/ping", func(c *gin.Context) {
@@ -78,6 +87,18 @@ func main() {
 			"filename":     filename,
 			"parsed_count": len(parsedLogs),
 		})
+	})
+
+	// Get Logs Endpoint
+	router.GET("/api/logs", func(c *gin.Context) {
+		logs, err := database.GetLogs()
+		if err != nil {
+			log.Println("Error fetching logs:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch logs"})
+			return
+		}
+
+		c.JSON(http.StatusOK, logs)
 	})
 
 	// Start the server
