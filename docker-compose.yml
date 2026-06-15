@@ -21,7 +21,7 @@ services:
       - "8080:8080"
     environment:
       - DB_HOST=db
-    depends_on: #Don't start DB until it pass health checks
+    depends_on: #Don't start until DB pass health checks
       db:
         condition: service_healthy
 
