@@ -36,7 +36,7 @@ func GetLogs() ([]models.LogEntry, error) {
 	}
 	defer rows.Close()
 
-	var logs []models.LogEntry
+	logs := []models.LogEntry{}
 
 	// Loop through the result set
 	for rows.Next() {

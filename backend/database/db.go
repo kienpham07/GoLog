@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os" // Read environment variables
 
 	_ "github.com/lib/pq" // The blank identifier "_" imports the driver without using it directly
 )
@@ -12,8 +13,15 @@ import (
 var DB *sql.DB
 
 func Connect() {
-	// Update these values to match your PostgreSQL setup
-	connStr := "host=localhost port=5432 user=log_user password=Kienpham_35894091 dbname=log_analyzer sslmode=disable"
+
+	// Check if Docker provided a DB_HOST, otherwise default to localhost
+	host := os.Getenv("DB_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+
+	// Update these values to match the PostgreSQL setup
+	connStr := fmt.Sprintf("host=%s port=5432 user=log_user password=Kienpham_35894091 dbname=log_analyzer sslmode=disable", host)
 
 	var err error
 	// sql.Open validates the connection string but doesn't actually connect

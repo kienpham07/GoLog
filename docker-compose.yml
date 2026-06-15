@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: log_user
+      POSTGRES_PASSWORD: Kienpham_35894091
+      POSTGRES_DB: log_analyzer
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck: #Check if the DB is already opens
+      test: ["CMD-SHELL", "pg_isready -U log_user -d log_analyzer"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+    depends_on: #Don't start DB until it pass health checks
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
