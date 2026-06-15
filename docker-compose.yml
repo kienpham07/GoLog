@@ -2,15 +2,13 @@ services:
   db:
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: log_user
-      POSTGRES_PASSWORD: Kienpham_35894091
-      POSTGRES_DB: log_analyzer
-    ports:
-      - "5433:5432"
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - pgdata:/var/lib/postgresql
-    healthcheck: #Check if the DB is already opens
-      test: ["CMD-SHELL", "pg_isready -U log_user -d log_analyzer"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -20,8 +18,12 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - DB_HOST=db
-    depends_on: #Don't start until DB pass health checks
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+    depends_on:
       db:
         condition: service_healthy
 

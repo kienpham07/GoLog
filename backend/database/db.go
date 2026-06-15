@@ -4,33 +4,47 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os" // Read environment variables
+	"net"
+	"net/url"
+	"os"
 
-	_ "github.com/lib/pq" // The blank identifier "_" imports the driver without using it directly
+	_ "github.com/lib/pq"
 )
 
-// DB is a global variable holding the database connection pool
 var DB *sql.DB
 
-func Connect() {
+func requiredEnv(key string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		log.Fatalf("%s environment variable is required", key)
+	}
+	return value
+}
 
-	// Check if Docker provided a DB_HOST, otherwise default to localhost
-	host := os.Getenv("DB_HOST")
-	if host == "" {
-		host = "localhost"
+func Connect() {
+	host := requiredEnv("DB_HOST")
+	port := requiredEnv("DB_PORT")
+	user := requiredEnv("DB_USER")
+	password := requiredEnv("DB_PASSWORD")
+	dbName := requiredEnv("DB_NAME")
+
+	dsn := url.URL{ // Building Data Source Name and constructing URL (Ex: postgres://user:password@localhost:6767/name_db?sslmode=disable)
+		Scheme: "postgres",
+		User:   url.UserPassword(user, password),
+		Host:   net.JoinHostPort(host, port),
+		Path:   "/" + dbName,
 	}
 
-	// Update these values to match the PostgreSQL setup
-	connStr := fmt.Sprintf("host=%s port=5432 user=log_user password=Kienpham_35894091 dbname=log_analyzer sslmode=disable", host)
+	query := dsn.Query()
+	query.Set("sslmode", "disable") // Disable using an encrypted TLS connection:
+	dsn.RawQuery = query.Encode()
 
 	var err error
-	// sql.Open validates the connection string but doesn't actually connect
-	DB, err = sql.Open("postgres", connStr)
+	DB, err = sql.Open("postgres", dsn.String())
 	if err != nil {
 		log.Fatal("Error opening database connection: ", err)
 	}
 
-	// Ping actually opens the connection and verifies the credentials
 	err = DB.Ping()
 	if err != nil {
 		log.Fatal("Error connecting to the database: ", err)

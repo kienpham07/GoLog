@@ -59,12 +59,6 @@ func main() {
 			return
 		}
 
-		// 4. Return a success response
-		c.JSON(http.StatusOK, gin.H{
-			"message":  "File uploaded successfully",
-			"filename": filename,
-		})
-
 		// After saving, parse the file!
 		parsedLogs, err := services.ParseLogFile(destination)
 		if err != nil {
