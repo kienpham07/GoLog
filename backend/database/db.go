@@ -64,7 +64,22 @@ func Connect() {
 
 // InitSchema ensures our database tables exist before the app starts running
 func InitSchema() {
-	query := `
+	// 1. Create the users table
+	userQuery := `
+	CREATE TABLE IF NOT EXISTS users (
+		id SERIAL PRIMARY KEY,
+		username VARCHAR(50) UNIQUE NOT NULL,
+		password_hash VARCHAR(255) NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	_, err := DB.Exec(userQuery)
+	if err != nil {
+		log.Fatal("Failed to initialize users schema: ", err)
+	}
+
+	// 2. Create the logs table (your existing code)
+	logQuery := `
 	CREATE TABLE IF NOT EXISTS logs (
 		id SERIAL PRIMARY KEY,
 		ip VARCHAR(50),
@@ -74,9 +89,10 @@ func InitSchema() {
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
 
-	_, err := DB.Exec(query)
+	_, err = DB.Exec(logQuery)
 	if err != nil {
-		log.Fatal("Failed to initialize database schema: ", err)
+		log.Fatal("Failed to initialize logs schema: ", err)
 	}
-	fmt.Println("✅ Database schema initialized!")
+
+	fmt.Println("✅ Database schemas initialized!")
 }

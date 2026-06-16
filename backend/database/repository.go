@@ -49,3 +49,28 @@ func GetLogs() ([]models.LogEntry, error) {
 
 	return logs, nil
 }
+
+// CreateUser hashes a password and saves the new user to PostgreSQL
+func CreateUser(username, passwordHash string) error {
+	stmt, err := DB.Prepare("INSERT INTO users (username, password_hash) VALUES ($1, $2)")
+	if err != nil {
+		return fmt.Errorf("failed to prepare user statement: %w", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(username, passwordHash)
+	return err
+}
+
+// GetUserByUsername retrieves a user to verify login credentials
+func GetUserByUsername(username string) (*models.User, error) {
+	var user models.User
+
+	query := "SELECT id, username, password_hash FROM users WHERE username = $1"
+	err := DB.QueryRow(query, username).Scan(&user.ID, &user.Username, &user.PasswordHash)
+
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

@@ -9,7 +9,10 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kienpham07/GoLog/backend/database"
+	"github.com/kienpham07/GoLog/backend/models"
 	"github.com/kienpham07/GoLog/backend/services"
+	"github.com/kienpham07/GoLog/backend/utils"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -22,7 +25,10 @@ func main() {
 	database.Connect()
 	database.InitSchema()
 
-	// 2. Set up the Gin router
+	// 2. Initialize JWT settings
+	utils.InitJWT()
+
+	// 3. Set up the Gin router
 	router := gin.Default()
 
 	// Enable CORS for the frontend
@@ -40,6 +46,71 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "pong",
 		})
+	})
+
+	// --------------------------------------------------------
+	// AUTHENTICATION ENDPOINTS
+	// --------------------------------------------------------
+
+	// User Registration
+	router.POST("/api/register", func(c *gin.Context) {
+		var creds models.Credentials
+
+		// Bind the incoming JSON to our Credentials struct
+		if err := c.ShouldBindJSON(&creds); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		// Hash the password using bcrypt (Cost of 14 is a strong default)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(creds.Password), 14)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to encrypt password"})
+			return
+		}
+
+		// Save to PostgreSQL
+		err = database.CreateUser(creds.Username, string(hashedPassword))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Username already exists or database error"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "User registered successfully"})
+	})
+
+	// User Login
+	router.POST("/api/login", func(c *gin.Context) {
+		var creds models.Credentials
+		if err := c.ShouldBindJSON(&creds); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+			return
+		}
+
+		// Look up the user in the database
+		user, err := database.GetUserByUsername(creds.Username)
+		if err != nil {
+			// Always return a generic error for security (don't reveal if the username exists)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+			return
+		}
+
+		// Compare the provided password against the stored hash
+		err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(creds.Password))
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
+			return
+		}
+
+		// Password is correct! Generate the JWT.
+		token, err := utils.GenerateToken(user.Username)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+			return
+		}
+
+		// Send the token back to the frontend
+		c.JSON(http.StatusOK, gin.H{"token": token})
 	})
 
 	// New File Upload Endpoint

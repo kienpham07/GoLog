@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18-alpine
+    image: postgres:18-alpine # Download the Postgres image
     environment: # Pull from env file
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -14,7 +14,7 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build: ./backend # Find the Dockerfile on backend folder
     ports:
       - "127.0.0.1:8080:8080"
     environment:
@@ -29,7 +29,7 @@ services:
         condition: service_healthy
 
   frontend:
-    build: ./frontend
+    build: ./frontend # Find the Dockerfile on frontend folder
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
