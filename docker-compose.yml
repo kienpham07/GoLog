@@ -1,13 +1,13 @@
 services:
   db:
     image: postgres:18-alpine
-    environment:
+    environment: # Pull from env file
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     volumes:
       - pgdata:/var/lib/postgresql
-    healthcheck:
+    healthcheck: # pings Postgres every 5s - other services wait for this to pass before starting
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
@@ -16,13 +16,14 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       DB_HOST: db
       DB_PORT: "5432"
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME}
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
     depends_on:
       db:
         condition: service_healthy
@@ -30,7 +31,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - backend
 

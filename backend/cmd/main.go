@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -9,6 +10,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/kienpham07/GoLog/backend/database"
 	"github.com/kienpham07/GoLog/backend/services"
+)
+
+const (
+	maxUploadSize      int64 = 8 << 20                   // 8 x 2^20 (Limit file upload)
+	maxRequestBodySize int64 = maxUploadSize + (1 << 20) // (Limit of the entire http request)
 )
 
 func main() {
@@ -26,10 +32,8 @@ func main() {
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept"}, // Identify HTTP Headers permitted in request
 	}))
 
-	router.MaxMultipartMemory = 8 << 20
-
 	// Limit the maximum memory for file uploads to 8 MB to prevent server crashes from massive files.
-	router.MaxMultipartMemory = 8 << 20 // 8 x 2^20 byte = 8MB
+	router.MaxMultipartMemory = maxUploadSize
 
 	// GET health-check endpoint
 	router.GET("/ping", func(c *gin.Context) {
@@ -40,10 +44,21 @@ func main() {
 
 	// New File Upload Endpoint
 	router.POST("/api/upload", func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodySize)
+
 		// 1. Retrieve the file from the form data (key must be "file")
 		file, err := c.FormFile("file")
 		if err != nil {
+			var maxBytesErr *http.MaxBytesError
+			if errors.As(err, &maxBytesErr) {
+				c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "File is too large"})
+				return
+			}
 			c.JSON(http.StatusBadRequest, gin.H{"error": "No file received"})
+			return
+		}
+		if file.Size > maxUploadSize {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "File is too large"})
 			return
 		}
 

@@ -21,12 +21,21 @@ func requiredEnv(key string) string {
 	return value
 }
 
+func optionalEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
+
 func Connect() {
 	host := requiredEnv("DB_HOST")
 	port := requiredEnv("DB_PORT")
 	user := requiredEnv("DB_USER")
 	password := requiredEnv("DB_PASSWORD")
 	dbName := requiredEnv("DB_NAME")
+	sslMode := optionalEnv("DB_SSLMODE", "disable")
 
 	dsn := url.URL{ // Building Data Source Name and constructing URL (Ex: postgres://user:password@localhost:6767/name_db?sslmode=disable)
 		Scheme: "postgres",
@@ -36,7 +45,7 @@ func Connect() {
 	}
 
 	query := dsn.Query()
-	query.Set("sslmode", "disable") // Disable using an encrypted TLS connection:
+	query.Set("sslmode", sslMode)
 	dsn.RawQuery = query.Encode()
 
 	var err error
