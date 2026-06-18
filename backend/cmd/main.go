@@ -33,9 +33,9 @@ func main() {
 
 	// Enable CORS for the frontend
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:3000"},            //Next.js port
-		AllowMethods: []string{"GET", "POST", "OPTIONS"},           // Identify which kinds of requests are allowed for FE
-		AllowHeaders: []string{"Origin", "Content-Type", "Accept"}, // Identify HTTP Headers permitted in request
+		AllowOrigins: []string{"http://localhost:3000"},                             //Next.js port
+		AllowMethods: []string{"GET", "POST", "OPTIONS"},                            // Identify which kinds of requests are allowed for FE
+		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"}, // Identify HTTP Headers permitted in request
 	}))
 
 	// Limit the maximum memory for file uploads to 8 MB to prevent server crashes from massive files.

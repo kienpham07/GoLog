@@ -14,6 +14,10 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { useRouter } from "next/navigation";
+
+// Use an environment variable for the API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 // 1. Define the TypeScript Interface
 interface LogEntry {
@@ -32,6 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function Home() {
+  const router = useRouter();
   // 2. Set up state variables
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,19 +45,41 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  // 3. Fetch data from the Go backend when the page loads
+  // Fetch data from the Go backend
   useEffect(() => {
-    fetch("http://localhost:8080/api/logs")
-      .then((res) => res.json())
+    // 1. Check for the token
+    const token = localStorage.getItem("golog_token");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+
+    // 2. Fetch the logs with Authorization header
+    fetch(`${API_BASE_URL}/api/logs`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+      .then((res) => {
+        if (res.status === 401) {
+          // Token might be invalid or expired
+          localStorage.removeItem("golog_token");
+          router.push("/login");
+          return;
+        }
+        return res.json();
+      })
       .then((data) => {
-        setLogs(data);
+        if (data) {
+          setLogs(data);
+        }
         setLoading(false);
       })
       .catch((err) => {
         console.error("Failed to fetch logs:", err);
         setLoading(false);
       });
-  }, []);
+  }, [router]);
 
   // NEW: Filter the logs based on user input
   const filteredLogs = useMemo(() => {
@@ -94,13 +121,25 @@ export default function Home() {
     }));
   }, [filteredLogs]);
 
+  const handleLogout = () => {
+    localStorage.removeItem("golog_token");
+    router.push("/login");
+  };
+
   return (
-    // We wrap everything in a min-h-screen div to ensure the background color covers the whole browser window
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans">
       <main className="p-8 max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-gray-800">
-          GoLog Analytics Dashboard
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800">
+            GoLog Analytics Dashboard
+          </h1>
+          <button
+            onClick={handleLogout}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Logout
+          </button>
+        </div>
 
         {/* NEW: Search and Filter Controls */}
         <div className="flex flex-col sm:flex-row gap-4 mb-8 bg-white p-4 rounded-lg shadow-sm border border-gray-200">
@@ -202,7 +241,6 @@ export default function Home() {
                   </td>
                 </tr>
               ) : (
-                // UPDATE: Ensure this maps over filteredLogs, not logs!
                 filteredLogs.map((log, index) => (
                   <tr
                     key={index}
