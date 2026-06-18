@@ -32,3 +32,13 @@ func GenerateToken(username string) (string, error) {
 	// Sign the token with our secret key
 	return token.SignedString(secretKey)
 }
+
+// ValidateToken parses and validates a JWT signed by this application.
+func ValidateToken(tokenString string) (*jwt.Token, error) {
+	return jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if token.Method != jwt.SigningMethodHS256 { // Ensure the signing method matches
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return secretKey, nil
+	})
+}

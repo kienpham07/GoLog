@@ -9,6 +9,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kienpham07/GoLog/backend/database"
+	"github.com/kienpham07/GoLog/backend/middleware"
 	"github.com/kienpham07/GoLog/backend/models"
 	"github.com/kienpham07/GoLog/backend/services"
 	"github.com/kienpham07/GoLog/backend/utils"
@@ -170,7 +171,7 @@ func main() {
 	})
 
 	// Get Logs Endpoint
-	router.GET("/api/logs", func(c *gin.Context) {
+	router.GET("/api/logs", middleware.AuthRequired(), func(c *gin.Context) {
 		logs, err := database.GetLogs()
 		if err != nil {
 			log.Println("Error fetching logs:", err)
