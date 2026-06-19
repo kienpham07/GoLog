@@ -1,7 +1,5 @@
 # GoLog Web Log Analyzer
 
-[![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=flat-square)](https://github.com/RichardLitt/standard-readme)
-
 A full-stack web log analyzer for uploading, parsing, storing, and visualizing HTTP access logs.
 
 GoLog combines a Go/Gin API, PostgreSQL persistence, JWT authentication, and a Next.js dashboard. It parses simple log lines, stores valid entries, and displays searchable log data with charts for request methods and status-code distribution.
