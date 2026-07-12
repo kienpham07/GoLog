@@ -50,6 +50,7 @@ export default function LoginPage() {
         // Safe localStorage access
         if (typeof window !== "undefined") {
           localStorage.setItem("golog_token", data.token);
+          localStorage.setItem("golog_username", username);
         }
         router.push("/");
       } else {
@@ -71,23 +72,26 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-gray-900">
+    <div className="min-h-screen bg-cyber-bg flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-white">
       <div className="sm:mx-auto sm:w-full sm:max-w-md text-center">
-        <h2 className="text-3xl font-extrabold text-gray-900">GoLog</h2>
-        <p className="mt-2 text-sm text-gray-600">
-          {isLogin ? "Sign in to your dashboard" : "Create a new admin account"}
+        <h2 className="text-3xl font-extrabold text-white tracking-wider flex items-center justify-center gap-1">
+          <span className="text-cyber-purple font-extrabold">Go</span>
+          <span className="text-white font-extrabold">Log</span>
+        </h2>
+        <p className="mt-2 text-xs text-gray-400 font-mono uppercase tracking-wider">
+          {isLogin ? "Sign in to your GoLog dashboard" : "Create a new admin account"}
         </p>
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow-sm border border-gray-200 sm:rounded-lg sm:px-10">
+        <div className="bg-cyber-card py-8 px-4 border border-cyber-border sm:rounded-xl sm:px-10 shadow-[0_4px_30px_rgba(0,0,0,0.4)]">
           <form className="space-y-6" onSubmit={handleSubmit}>
             {message.text && (
               <div
-                className={`p-3 text-sm rounded ${
+                className={`p-3 text-sm rounded-lg border ${
                   message.type === "success"
-                    ? "bg-green-50 text-green-700"
-                    : "bg-red-50 text-red-700"
+                    ? "bg-cyber-cyan/10 text-cyber-cyan border-cyber-cyan/20 font-mono text-xs"
+                    : "bg-rose-500/10 text-rose-400 border-rose-500/20 font-mono text-xs"
                 }`}
               >
                 {message.text}
@@ -97,7 +101,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="username"
-                className="block text-sm font-medium text-gray-700"
+                className="block text-xs font-semibold uppercase tracking-wider text-gray-400 font-mono"
               >
                 Username
               </label>
@@ -108,7 +112,8 @@ export default function LoginPage() {
                   type="text"
                   required
                   autoComplete="username"
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2.5 border border-cyber-border bg-cyber-bg rounded-lg shadow-sm placeholder-gray-600 focus:outline-none focus:border-cyber-purple focus:ring-2 focus:ring-cyber-purple/20 text-white sm:text-sm transition-all duration-200"
+                  placeholder="admin"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />
@@ -118,7 +123,7 @@ export default function LoginPage() {
             <div>
               <label
                 htmlFor="password"
-                className="block text-sm font-medium text-gray-700"
+                className="block text-xs font-semibold uppercase tracking-wider text-gray-400 font-mono"
               >
                 Password
               </label>
@@ -129,7 +134,8 @@ export default function LoginPage() {
                   type="password"
                   required
                   autoComplete={isLogin ? "current-password" : "new-password"}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white sm:text-sm"
+                  className="appearance-none block w-full px-3 py-2.5 border border-cyber-border bg-cyber-bg rounded-lg shadow-sm placeholder-gray-600 focus:outline-none focus:border-cyber-purple focus:ring-2 focus:ring-cyber-purple/20 text-white sm:text-sm transition-all duration-200"
+                  placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -140,7 +146,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-[0_0_15px_rgba(137,81,255,0.45)] text-sm font-bold text-white bg-cyber-purple hover:bg-cyber-purple/95 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyber-purple disabled:opacity-50 transition cursor-pointer"
               >
                 {loading ? "Processing..." : isLogin ? "Sign in" : "Register"}
               </button>
@@ -150,10 +156,10 @@ export default function LoginPage() {
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
+                <div className="w-full border-t border-cyber-border" />
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or</span>
+              <div className="relative flex justify-center text-xs">
+                <span className="px-2 bg-cyber-card text-gray-500 font-mono">Or</span>
               </div>
             </div>
 
@@ -164,7 +170,7 @@ export default function LoginPage() {
                   setIsLogin(!isLogin);
                   setMessage({ text: "", type: null });
                 }}
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none disabled:opacity-50"
+                className="w-full flex justify-center py-2.5 px-4 border border-cyber-border rounded-lg shadow-sm text-sm font-semibold text-gray-300 bg-cyber-bg hover:bg-cyber-card focus:outline-none disabled:opacity-50 transition cursor-pointer"
               >
                 {isLogin ? "Create an account" : "Sign in to existing account"}
               </button>

@@ -73,7 +73,7 @@ func main() {
 		// Save to PostgreSQL
 		err = database.CreateUser(creds.Username, string(hashedPassword))
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Username already exists or database error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Username already exists"})
 			return
 		}
 
@@ -158,7 +158,7 @@ func main() {
 		err = database.InsertLogEntries(parsedLogs)
 		if err != nil {
 			log.Println("Error saving to database:", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save logs to database"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save logs"})
 			return
 		}
 
