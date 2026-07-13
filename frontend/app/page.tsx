@@ -580,8 +580,10 @@ function TopNavigation({
   onToggleSidebar,
   username,
 }: TopNavigationProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
   return (
-    <header className="sticky top-0 z-20 border-b border-cyber-border bg-cyber-bg/95 backdrop-blur shrink-0">
+    <header className="relative z-20 border-b border-cyber-border bg-cyber-bg/95 backdrop-blur shrink-0">
       <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex shrink-0 items-center gap-4">
           <button
@@ -613,11 +615,20 @@ function TopNavigation({
         </label>
 
         <div className="ml-auto flex items-center gap-2 sm:gap-4">
-          {/* Profile Dropdown */}
-          <details className="relative">
-            <summary
+          {/* Backdrop to close dropdown on click outside */}
+          {isDropdownOpen && (
+            <div
+              className="fixed inset-0 z-30 bg-transparent"
+              onClick={() => setIsDropdownOpen(false)}
+            />
+          )}
+
+          {/* Profile Dropdown Container */}
+          <div className="relative z-45">
+            <button
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className="flex cursor-pointer items-center gap-3 rounded-full px-1 py-1 transition hover:bg-cyber-card focus:outline-none"
               aria-label="Open profile menu"
-              className="flex cursor-pointer list-none items-center gap-3 rounded-full px-1 py-1 transition hover:bg-cyber-card focus:outline-none"
             >
               <img
                 src="/user_avatar.png"
@@ -632,19 +643,43 @@ function TopNavigation({
                   Administrator
                 </span>
               </span>
-              <ChevronDownIcon className="h-4 w-4 text-gray-500" />
-            </summary>
+              <ChevronDownIcon
+                className={`h-4 w-4 text-gray-500 transition-transform duration-350 ease-out ${
+                  isDropdownOpen ? "rotate-180 text-cyber-cyan" : ""
+                }`}
+              />
+            </button>
 
-            <div className="absolute right-0 mt-3 w-36 rounded-lg border border-cyber-border bg-cyber-card p-2 shadow-[0_12px_30px_rgba(0,0,0,0.6)]">
+            {/* Animated Dropdown Menu overlay */}
+            <div
+              className={`absolute right-0 mt-3 w-40 rounded-lg border border-cyber-border bg-cyber-card p-2 shadow-[0_12px_30px_rgba(0,0,0,0.6)] transition-all duration-300 ease-in-out origin-top-right ${
+                isDropdownOpen
+                  ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                  : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
+              }`}
+            >
               <button
                 type="button"
-                onClick={onLogout}
-                className="w-full rounded-md px-3 py-2 text-left text-sm font-semibold text-gray-300 transition hover:bg-cyber-bg hover:text-cyber-cyan focus:outline-none"
+                onClick={() => {
+                  setIsDropdownOpen(false);
+                  alert("Settings dashboard coming soon!");
+                }}
+                className="w-full rounded-md px-3 py-2 text-left text-xs font-bold text-gray-300 transition hover:bg-cyber-bg hover:text-cyber-cyan focus:outline-none"
+              >
+                Settings
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDropdownOpen(false);
+                  onLogout();
+                }}
+                className="w-full rounded-md px-3 py-2 text-left text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition focus:outline-none mt-1 pt-2 border-t border-cyber-border/40"
               >
                 Logout
               </button>
             </div>
-          </details>
+          </div>
         </div>
       </div>
 
