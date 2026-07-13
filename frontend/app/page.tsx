@@ -124,6 +124,21 @@ function ChevronDownIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Logs / Warning Icon
+function LogsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // Sidebar Icons
 function DashboardIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -148,9 +163,11 @@ function DashboardIcon(props: SVGProps<SVGSVGElement>) {
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
+  currentView: 'dashboard' | 'error-logs';
+  onViewChange: (view: 'dashboard' | 'error-logs') => void;
 }
 
-function Sidebar({ isOpen, onClose }: SidebarProps) {
+function Sidebar({ isOpen, onClose, currentView, onViewChange }: SidebarProps) {
   return (
     <>
       {/* Mobile Backdrop */}
@@ -171,7 +188,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div className="w-[198px] bg-cyber-card flex flex-col justify-between py-6 px-4 border-r border-cyber-border">
           <div className="flex flex-col gap-6">
             {/* Brand Title with unified 'G' logo and 'GoLog' text */}
-            <div className="flex items-center gap-2.5 justify-center relative w-full -translate-x-3">
+            <div className="flex items-center gap-2.5 justify-center relative w-full">
               {/* Logo Icon */}
               <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-gradient-to-tr from-cyber-blue via-cyber-purple to-cyber-cyan text-white font-extrabold text-sm shadow-[0_0_12px_rgba(137,81,255,0.35)] shrink-0">
                 G
@@ -194,13 +211,38 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             {/* Navigation Lists */}
             <nav className="flex flex-col gap-1">
-              {/* Active Dashboard uses solid purple rounded background block */}
+              {/* Dashboard view link */}
               <button
                 type="button"
-                className="flex w-full items-center gap-3 rounded-lg bg-cyber-purple px-3 py-2 text-xs font-bold text-white shadow-[0_0_15px_rgba(137,81,255,0.4)] transition"
+                onClick={() => {
+                  onViewChange('dashboard');
+                  onClose();
+                }}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                  currentView === 'dashboard'
+                    ? 'bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.4)]'
+                    : 'text-gray-400 hover:bg-cyber-bg hover:text-white'
+                }`}
               >
-                <DashboardIcon className="h-4 w-4 shrink-0 text-white" />
+                <DashboardIcon className="h-4 w-4 shrink-0" />
                 <span>Dashboard</span>
+              </button>
+
+              {/* Error Logs view link */}
+              <button
+                type="button"
+                onClick={() => {
+                  onViewChange('error-logs');
+                  onClose();
+                }}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                  currentView === 'error-logs'
+                    ? 'bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.4)]'
+                    : 'text-gray-400 hover:bg-cyber-bg hover:text-white'
+                }`}
+              >
+                <LogsIcon className="h-4 w-4 shrink-0" />
+                <span>Error Logs</span>
               </button>
             </nav>
           </div>
@@ -364,6 +406,7 @@ export default function Home() {
     return "User";
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'error-logs'>('dashboard');
   const [searchQuery, setSearchQuery] = useState(""); // top bar search
 
   // Aggregation States
@@ -621,6 +664,8 @@ export default function Home() {
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        currentView={currentView}
+        onViewChange={setCurrentView}
       />
 
       <div className="flex-1 flex flex-col min-w-0 bg-cyber-bg">
@@ -633,267 +678,438 @@ export default function Home() {
         />
 
         <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto">
-          {/* Top Title & Actions Section */}
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-extrabold text-white tracking-wide">
-                Dashboard Analytics
-              </h1>
-              <p className="text-xs text-gray-400 font-mono mt-1 uppercase tracking-wider text-[10px]">
-                Real-time log analyzer database stream
-              </p>
-            </div>
-
-            {/* Actions: Session Select, Hidden File Input, Upload Button */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Session Filter Dropdown */}
-              <div className="relative">
-                <select
-                  value={selectedSessionID !== null ? selectedSessionID : ""}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setSelectedSessionID(val ? Number(val) : null);
-                  }}
-                  className="appearance-none bg-cyber-card border border-cyber-border rounded-lg text-xs font-bold text-gray-300 pl-4 pr-10 py-2.5 outline-none cursor-pointer hover:border-cyber-purple/65 hover:text-white transition shadow-sm"
-                  aria-label="Filter by log upload session"
-                >
-                  <option value="">All Upload Sessions</option>
-                  {sessions.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.filename} ({formatCount(s.parsed_count)} lines)
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
-                  <ChevronDownIcon className="h-3 w-3" />
+          {currentView === 'dashboard' ? (
+            <>
+              {/* Top Title & Actions Section */}
+              <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="text-2xl font-extrabold text-white tracking-wide">
+                    Dashboard Analytics
+                  </h1>
+                  <p className="text-xs text-gray-400 font-mono mt-1 uppercase tracking-wider text-[10px]">
+                    Real-time log analyzer database stream
+                  </p>
                 </div>
-              </div>
 
-              {/* Upload file UI */}
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept=".log"
-                className="hidden"
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                className="flex items-center gap-2 bg-cyber-purple hover:bg-cyber-purple/90 text-white px-4 py-2.5 rounded-lg text-xs font-bold transition shadow-[0_0_12px_rgba(137,81,255,0.4)] disabled:opacity-50"
-              >
-                {isUploading ? (
-                  <>
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    <span>Uploading...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="h-3.5 w-3.5 text-cyber-cyan"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2.5}
+                {/* Actions: Session Select, Hidden File Input, Upload Button */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Session Filter Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={selectedSessionID !== null ? selectedSessionID : ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSelectedSessionID(val ? Number(val) : null);
+                      }}
+                      className="appearance-none bg-cyber-card border border-cyber-border rounded-lg text-xs font-bold text-gray-300 pl-4 pr-10 py-2.5 outline-none cursor-pointer hover:border-cyber-purple/65 hover:text-white transition shadow-sm"
+                      aria-label="Filter by log upload session"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-                      />
-                    </svg>
-                    <span>Upload Log</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* 1. Upload Success / Error Banner */}
-          {uploadStatus && (
-            <div className="mb-8 p-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.05)] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base">✅</span>
-                <span>
-                  Parsed <strong>{uploadStatus.parsed_count}</strong> lines · <strong>{uploadStatus.skipped_count}</strong> errors skipped · <strong>{uploadStatus.date_range}</strong>
-                </span>
-              </div>
-              <button
-                onClick={() => setUploadStatus(null)}
-                className="text-emerald-400 hover:text-emerald-300 font-bold ml-4 focus:outline-none"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {uploadError && (
-            <div className="mb-8 p-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-base">⚠️</span>
-                <span>{uploadError}</span>
-              </div>
-              <button
-                onClick={() => setUploadError(null)}
-                className="text-rose-400 hover:text-rose-300 font-bold ml-4 focus:outline-none"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-
-          {/* 2. Overview cards (row of 4) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
-              <div>
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
-                  Total Requests
-                </span>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
-                  {loading ? "..." : formatCount(overview?.total_requests || 0)}
-                </div>
-              </div>
-              <div className="mt-4 text-[10px] text-gray-500 font-mono">
-                Total parsed request lines
-              </div>
-            </div>
-
-            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
-              <div>
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
-                  Unique Visitors
-                </span>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
-                  {loading ? "..." : formatCount(overview?.unique_ips || 0)}
-                </div>
-              </div>
-              <div className="mt-4 text-[10px] text-gray-500 font-mono">
-                Distinct visitor IP addresses
-              </div>
-            </div>
-
-            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
-              <div>
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
-                  Error Rate
-                </span>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
-                  {loading
-                    ? "..."
-                    : ((overview?.error_rate || 0) * 100).toFixed(2) + "%"}
-                </div>
-              </div>
-              <div className="mt-4 text-[10px] text-gray-500 font-mono">
-                Ratio of status codes &gt;= 400
-              </div>
-            </div>
-
-            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
-              <div>
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
-                  Total Bandwidth
-                </span>
-                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
-                  {loading ? "..." : formatBytes(Number(overview?.total_bytes || 0))}
-                </div>
-              </div>
-              <div className="mt-4 text-[10px] text-gray-500 font-mono">
-                Sum of response bytes sent
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Row: 3. Traffic line chart & 4. Status code pie chart */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-            {/* 3. Traffic Line Chart (col-span-2) */}
-            <div className="lg:col-span-2 bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
-              <h3 className="text-base font-bold text-white mb-1">Traffic Over Time</h3>
-              <p className="text-xs text-gray-400 font-mono mb-6">Aggregated requests by hour</p>
-              <div className="h-72">
-                {mounted && !loading ? (
-                  traffic.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
-                      No traffic data available
+                      <option value="">All Upload Sessions</option>
+                      {sessions.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.filename} ({formatCount(s.parsed_count)} lines)
+                        </option>
+                      ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
+                      <ChevronDownIcon className="h-3 w-3" />
                     </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={traffic} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" vertical={false} />
-                        <XAxis
-                          dataKey="hour"
-                          stroke="#4b5563"
-                          fontSize={9}
-                          tickLine={false}
-                          tickFormatter={formatHour}
-                          className="font-mono"
-                        />
-                        <YAxis stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: "#121620",
-                            borderColor: "#1E2530",
-                            borderRadius: "8px",
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                          }}
-                          labelStyle={{ color: "#fff" }}
-                          labelFormatter={formatHour}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="count"
-                          stroke="#21C3FC"
-                          strokeWidth={2}
-                          activeDot={{ r: 6 }}
-                          name="Requests"
-                          dot={false}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  )
-                ) : (
-                  <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
-                )}
-              </div>
-            </div>
+                  </div>
 
-            {/* 4. Status Code breakdown Donut chart */}
-            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between">
-              <div>
-                <h3 className="text-base font-bold text-white mb-1">Status Codes</h3>
-                <p className="text-xs text-gray-400 font-mono mb-6">Breakdown of response classes</p>
-                <div className="h-60 flex items-center justify-center">
+                  {/* Upload file UI */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept=".log"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="flex items-center gap-2 bg-cyber-purple hover:bg-cyber-purple/90 text-white px-4 py-2.5 rounded-lg text-xs font-bold transition shadow-[0_0_12px_rgba(137,81,255,0.4)] disabled:opacity-50"
+                  >
+                    {isUploading ? (
+                      <>
+                        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>Uploading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="h-3.5 w-3.5 text-cyber-cyan"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2.5}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                          />
+                        </svg>
+                        <span>Upload Log</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* 1. Upload Success / Error Banner */}
+              {uploadStatus && (
+                <div className="mb-8 p-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.05)] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">✅</span>
+                    <span>
+                      Parsed <strong>{uploadStatus.parsed_count}</strong> lines · <strong>{uploadStatus.skipped_count}</strong> errors skipped · <strong>{uploadStatus.date_range}</strong>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setUploadStatus(null)}
+                    className="text-emerald-400 hover:text-emerald-300 font-bold ml-4 focus:outline-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="mb-8 p-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">⚠️</span>
+                    <span>{uploadError}</span>
+                  </div>
+                  <button
+                    onClick={() => setUploadError(null)}
+                    className="text-rose-400 hover:text-rose-300 font-bold ml-4 focus:outline-none"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* 2. Overview cards (row of 4) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+                  <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                      Total Requests
+                    </span>
+                    <h2 className="text-2xl font-black text-white mt-2 tracking-tight">
+                      {loading ? (
+                        <span className="inline-block h-6 w-16 bg-cyber-bg/40 animate-pulse rounded" />
+                      ) : (
+                        formatCount(overview?.total_requests || 0)
+                      )}
+                    </h2>
+                  </div>
+                  <div className="mt-4 flex items-center text-[10px] text-emerald-400 font-bold font-mono uppercase tracking-wider">
+                    <span>Active stream logs</span>
+                  </div>
+                </div>
+
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+                  <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                      Unique Visitors
+                    </span>
+                    <h2 className="text-2xl font-black text-white mt-2 tracking-tight">
+                      {loading ? (
+                        <span className="inline-block h-6 w-16 bg-cyber-bg/40 animate-pulse rounded" />
+                      ) : (
+                        formatCount(overview?.unique_ips || 0)
+                      )}
+                    </h2>
+                  </div>
+                  <div className="mt-4 flex items-center text-[10px] text-cyber-cyan font-bold font-mono uppercase tracking-wider">
+                    <span>Distinct client IPs</span>
+                  </div>
+                </div>
+
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+                  <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                      Error Rate
+                    </span>
+                    <h2 className="text-2xl font-black text-white mt-2 tracking-tight">
+                      {loading ? (
+                        <span className="inline-block h-6 w-16 bg-cyber-bg/40 animate-pulse rounded" />
+                      ) : (
+                        `${((overview?.error_rate || 0) * 100).toFixed(2)}%`
+                      )}
+                    </h2>
+                  </div>
+                  <div className="mt-4 flex items-center text-[10px] text-rose-400 font-bold font-mono uppercase tracking-wider">
+                    <span>Status codes &gt;= 400</span>
+                  </div>
+                </div>
+
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+                  <div>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                      Total Bandwidth
+                    </span>
+                    <h2 className="text-2xl font-black text-white mt-2 tracking-tight">
+                      {loading ? (
+                        <span className="inline-block h-6 w-20 bg-cyber-bg/40 animate-pulse rounded" />
+                      ) : (
+                        formatBytes(overview?.total_bytes || 0)
+                      )}
+                    </h2>
+                  </div>
+                  <div className="mt-4 flex items-center text-[10px] text-amber-400 font-bold font-mono uppercase tracking-wider">
+                    <span>Log bytes transferred</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Charts grid: Traffic & Status Codes */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                {/* 3. Traffic line chart */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm lg:col-span-2 flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-white mb-1">Traffic Over Time</h3>
+                    <p className="text-xs text-gray-400 font-mono mb-6">Total requests grouped hourly</p>
+                    <div className="h-60">
+                      {mounted && !loading ? (
+                        traffic.length === 0 ? (
+                          <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
+                            No traffic data available
+                          </div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={traffic} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" />
+                              <XAxis dataKey="hour" stroke="#4b5563" fontSize={9} tickLine={false} tickFormatter={formatHour} className="font-mono" />
+                              <YAxis stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: "#121620",
+                                  borderColor: "#1E2530",
+                                  borderRadius: "8px",
+                                  boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                                }}
+                                labelFormatter={formatHour}
+                              />
+                              <Line
+                                type="monotone"
+                                dataKey="count"
+                                name="Requests"
+                                stroke="#8951FF"
+                                strokeWidth={2.5}
+                                dot={false}
+                                activeDot={{ r: 6 }}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        )
+                      ) : (
+                        <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Status Code breakdown Donut chart */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-white mb-1">Status Codes</h3>
+                    <p className="text-xs text-gray-400 font-mono mb-6">Breakdown of response classes</p>
+                    <div className="h-60 flex items-center justify-center">
+                      {mounted && !loading ? (
+                        statusCodes.length === 0 ? (
+                          <div className="text-gray-500 font-mono text-xs">No data available</div>
+                        ) : (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={pieData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={55}
+                                outerRadius={75}
+                                paddingAngle={4}
+                                dataKey="value"
+                              >
+                                {pieData.map((entry, index) => {
+                                  const colors = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444"];
+                                  return (
+                                    <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                                  );
+                                })}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: "#121620",
+                                  borderColor: "#1E2530",
+                                  borderRadius: "8px",
+                                }}
+                              />
+                              <Legend verticalAlign="bottom" iconType="circle" fontSize={11} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )
+                      ) : (
+                        <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tables Row: Top pages & Top IPs */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                {/* 5. Top Pages Table */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+                  <h3 className="text-base font-bold text-white mb-1">Top Pages</h3>
+                  <p className="text-xs text-gray-400 font-mono mb-4">Most frequently requested paths</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                          <th className="pb-3 font-semibold w-12">Rank</th>
+                          <th className="pb-3 font-semibold">Path</th>
+                          <th className="pb-3 font-semibold text-right">Hits</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {loading ? (
+                          <tr>
+                            <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                              Loading top pages...
+                            </td>
+                          </tr>
+                        ) : topPages.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                              No page logs found
+                            </td>
+                          </tr>
+                        ) : (
+                          topPages.map((item, index) => (
+                            <tr
+                              key={index}
+                              className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
+                            >
+                              <td className="py-3 font-mono text-gray-400">{index + 1}</td>
+                              <td className="py-3 font-mono text-cyber-cyan truncate max-w-[280px]">
+                                {item.endpoint}
+                              </td>
+                              <td className="py-3 font-mono text-right font-bold text-white">
+                                {formatCount(item.count)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 6. Top IPs Table */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+                  <h3 className="text-base font-bold text-white mb-1">Top IPs</h3>
+                  <p className="text-xs text-gray-400 font-mono mb-4">Most active visitor addresses</p>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                          <th className="pb-3 font-semibold w-12">Rank</th>
+                          <th className="pb-3 font-semibold">IP Address</th>
+                          <th className="pb-3 font-semibold text-right">Requests</th>
+                          <th className="pb-3 font-semibold text-right w-24">Security</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {loading ? (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
+                              Loading top IPs...
+                            </td>
+                          </tr>
+                        ) : topIps.length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
+                              No IP logs found
+                            </td>
+                          </tr>
+                        ) : (
+                          topIps.map((item, index) => (
+                            <tr
+                              key={index}
+                              className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
+                            >
+                              <td className="py-3 font-mono text-gray-400">{index + 1}</td>
+                              <td className="py-3 font-mono text-gray-300">{item.ip}</td>
+                              <td className="py-3 font-mono text-right font-bold text-white">
+                                {formatCount(item.count)}
+                              </td>
+                              <td className="py-3 text-right">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    item.suspicious
+                                      ? "bg-rose-500/15 text-rose-400 border-rose-500/25"
+                                      : "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+                                  }`}
+                                >
+                                  {item.suspicious ? "Suspicious" : "Clean"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              {/* 8. Browser Breakdown Chart */}
+              <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+                <h3 className="text-base font-bold text-white mb-1">Browsers</h3>
+                <p className="text-xs text-gray-400 font-mono mb-6">Aggregate requests by visitor agent browser type</p>
+                <div className="h-72">
                   {mounted && !loading ? (
-                    statusCodes.length === 0 ? (
-                      <div className="text-gray-500 font-mono text-xs">No data available</div>
+                    browsers.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
+                        No browser data available
+                      </div>
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={pieData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={55}
-                            outerRadius={75}
-                            paddingAngle={4}
-                            dataKey="value"
-                          >
-                            {pieData.map((entry, index) => {
-                              const colors = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444"];
-                              return (
-                                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                              );
-                            })}
-                          </Pie>
+                        <BarChart
+                          data={browsers}
+                          layout="vertical"
+                          margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" horizontal={false} />
+                          <XAxis type="number" stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
+                          <YAxis
+                            type="category"
+                            dataKey="browser"
+                            stroke="#4b5563"
+                            fontSize={9}
+                            tickLine={false}
+                            className="font-mono"
+                          />
                           <Tooltip
                             contentStyle={{
                               backgroundColor: "#121620",
                               borderColor: "#1E2530",
                               borderRadius: "8px",
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
                             }}
                           />
-                          <Legend verticalAlign="bottom" iconType="circle" fontSize={11} />
-                        </PieChart>
+                          <Bar dataKey="count" fill="#8951FF" radius={[0, 4, 4, 0]} barSize={16}>
+                            {browsers.map((entry, index) => {
+                              const colors = ["#8951FF", "#21C3FC", "#10B981", "#F59E0B", "#EF4444"];
+                              return (
+                                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                              );
+                            })}
+                          </Bar>
+                        </BarChart>
                       </ResponsiveContainer>
                     )
                   ) : (
@@ -901,280 +1117,133 @@ export default function Home() {
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Tables Row: 5. Top pages & 6. Top IPs */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            {/* 5. Top Pages Table */}
-            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
-              <h3 className="text-base font-bold text-white mb-1">Top Pages</h3>
-              <p className="text-xs text-gray-400 font-mono mb-4">Most frequently requested paths</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-cyber-border text-gray-400 font-mono">
-                      <th className="pb-3 font-semibold w-12">Rank</th>
-                      <th className="pb-3 font-semibold">Path</th>
-                      <th className="pb-3 font-semibold text-right">Hits</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
-                          Loading top pages...
-                        </td>
-                      </tr>
-                    ) : topPages.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
-                          No page logs found
-                        </td>
-                      </tr>
-                    ) : (
-                      topPages.map((item, index) => (
-                        <tr
-                          key={index}
-                          className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
-                        >
-                          <td className="py-3 font-mono text-gray-400">{index + 1}</td>
-                          <td className="py-3 font-mono text-cyber-cyan truncate max-w-[280px]">
-                            {item.endpoint}
-                          </td>
-                          <td className="py-3 font-mono text-right font-bold text-white">
-                            {formatCount(item.count)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* 6. Top IPs Table */}
-            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
-              <h3 className="text-base font-bold text-white mb-1">Top IPs</h3>
-              <p className="text-xs text-gray-400 font-mono mb-4">Most active visitor addresses</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-cyber-border text-gray-400 font-mono">
-                      <th className="pb-3 font-semibold w-12">Rank</th>
-                      <th className="pb-3 font-semibold">IP Address</th>
-                      <th className="pb-3 font-semibold text-right">Requests</th>
-                      <th className="pb-3 font-semibold text-right w-24">Security</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? (
-                      <tr>
-                        <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
-                          Loading top IPs...
-                        </td>
-                      </tr>
-                    ) : topIps.length === 0 ? (
-                      <tr>
-                        <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
-                          No IP logs found
-                        </td>
-                      </tr>
-                    ) : (
-                      topIps.map((item, index) => (
-                        <tr
-                          key={index}
-                          className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
-                        >
-                          <td className="py-3 font-mono text-gray-400">{index + 1}</td>
-                          <td className="py-3 font-mono text-gray-300">{item.ip}</td>
-                          <td className="py-3 font-mono text-right font-bold text-white">
-                            {formatCount(item.count)}
-                          </td>
-                          <td className="py-3 text-right">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                item.suspicious
-                                  ? "bg-rose-500/15 text-rose-400 border-rose-500/25"
-                                  : "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
-                              }`}
-                            >
-                              {item.suspicious ? "Suspicious" : "Clean"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* 7. Error Log Table */}
-          <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm mb-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
-              <div>
-                <h3 className="text-base font-bold text-white">Error Logs</h3>
-                <p className="text-xs text-gray-400 font-mono mt-1">
-                  {filteredErrorLogs.length} matches in current view (status &gt;= 400)
+            </>
+          ) : (
+            <>
+              {/* Log Management Heading */}
+              <div className="mb-8">
+                <h1 className="text-2xl font-extrabold text-white tracking-wide">
+                  Log Management
+                </h1>
+                <p className="text-xs text-gray-400 font-mono mt-1 uppercase tracking-wider text-[10px]">
+                  Explore and analyze server status errors
                 </p>
               </div>
 
-              {/* Error Filtering & Searching */}
-              <div className="flex flex-wrap items-center gap-3">
-                <input
-                  type="text"
-                  placeholder="Search error path..."
-                  value={errorSearchQuery}
-                  onChange={(e) => setErrorSearchQuery(e.target.value)}
-                  className="bg-cyber-bg border border-cyber-border rounded-lg text-xs text-gray-300 px-3 py-2 outline-none focus:border-cyber-purple transition w-44"
-                />
-
-                <select
-                  value={errorStatusCodeFilter}
-                  onChange={(e) => setErrorStatusCodeFilter(e.target.value)}
-                  className="bg-cyber-bg border border-cyber-border rounded-lg text-xs font-semibold text-gray-300 px-3 py-2 outline-none cursor-pointer hover:border-cyber-purple transition"
-                  aria-label="Filter error logs by status code"
-                >
-                  <option value="All">All Error Codes</option>
-                  <option value="400">400 Bad Request</option>
-                  <option value="401">401 Unauthorized</option>
-                  <option value="403">403 Forbidden</option>
-                  <option value="404">404 Not Found</option>
-                  <option value="500">500 Server Error</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Error logs list */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-cyber-border text-gray-400 font-mono">
-                    <th className="pb-3 font-semibold">Timestamp</th>
-                    <th className="pb-3 font-semibold">IP Address</th>
-                    <th className="pb-3 font-semibold">Path</th>
-                    <th className="pb-3 font-semibold w-16">Status</th>
-                    <th className="pb-3 font-semibold truncate max-w-[200px]">User Agent</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-cyber-border/30">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-gray-500">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="h-4 w-4 animate-spin rounded-full border-2 border-cyber-purple border-t-transparent" />
-                          <span className="font-mono text-xs">Loading error streams...</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : filteredErrorLogs.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-gray-500 font-mono">
-                        No error logs match this view.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredErrorLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-cyber-bg/30 transition-colors">
-                        <td className="py-3 font-mono text-gray-400">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </td>
-                        <td className="py-3 font-mono text-cyber-cyan">{log.ip}</td>
-                        <td className="py-3 font-mono text-gray-200 truncate max-w-[200px]" title={log.endpoint}>
-                          {log.endpoint}
-                        </td>
-                        <td className="py-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                            {log.status}
-                          </span>
-                        </td>
-                        <td className="py-3 font-mono text-gray-400 truncate max-w-[200px]" title={log.user_agent}>
-                          {log.user_agent}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination Controls */}
-            <div className="flex justify-between items-center mt-6 border-t border-cyber-border/40 pt-4">
-              <button
-                type="button"
-                disabled={errorLogsPage === 0}
-                onClick={() => setErrorLogsPage((p) => p - 1)}
-                className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[10px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
-              >
-                Previous
-              </button>
-              <span className="text-[11px] text-gray-500 font-mono">
-                Page {errorLogsPage + 1}
-              </span>
-              <button
-                type="button"
-                disabled={errorLogs.length < errorLogsLimit}
-                onClick={() => setErrorLogsPage((p) => p + 1)}
-                className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[10px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-
-          {/* 8. Browser Breakdown Chart */}
-          <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
-            <h3 className="text-base font-bold text-white mb-1">Browsers</h3>
-            <p className="text-xs text-gray-400 font-mono mb-6">Aggregate requests by visitor agent browser type</p>
-            <div className="h-72">
-              {mounted && !loading ? (
-                browsers.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
-                    No browser data available
+              {/* 7. Error Log Table */}
+              <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm mb-8">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+                  <div>
+                    <h3 className="text-base font-bold text-white">Error Logs</h3>
+                    <p className="text-xs text-gray-400 font-mono mt-1">
+                      {filteredErrorLogs.length} matches in current view (status &gt;= 400)
+                    </p>
                   </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={browsers}
-                      layout="vertical"
-                      margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+
+                  {/* Error Filtering & Searching */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <input
+                      type="text"
+                      placeholder="Search error path..."
+                      value={errorSearchQuery}
+                      onChange={(e) => setErrorSearchQuery(e.target.value)}
+                      className="bg-cyber-bg border border-cyber-border rounded-lg text-xs text-gray-300 px-3 py-2 outline-none focus:border-cyber-purple transition w-44"
+                    />
+
+                    <select
+                      value={errorStatusCodeFilter}
+                      onChange={(e) => setErrorStatusCodeFilter(e.target.value)}
+                      className="bg-cyber-bg border border-cyber-border rounded-lg text-xs font-semibold text-gray-300 px-3 py-2 outline-none cursor-pointer hover:border-cyber-purple transition"
+                      aria-label="Filter error logs by status code"
                     >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" horizontal={false} />
-                      <XAxis type="number" stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
-                      <YAxis
-                        type="category"
-                        dataKey="browser"
-                        stroke="#4b5563"
-                        fontSize={9}
-                        tickLine={false}
-                        className="font-mono"
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "#121620",
-                          borderColor: "#1E2530",
-                          borderRadius: "8px",
-                          boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                        }}
-                      />
-                      <Bar dataKey="count" fill="#8951FF" radius={[0, 4, 4, 0]} barSize={16}>
-                        {browsers.map((entry, index) => {
-                          const colors = ["#8951FF", "#21C3FC", "#10B981", "#F59E0B", "#EF4444"];
-                          return (
-                            <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                          );
-                        })}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                )
-              ) : (
-                <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
-              )}
-            </div>
-          </div>
+                      <option value="All">All Error Codes</option>
+                      <option value="400">400 Bad Request</option>
+                      <option value="401">401 Unauthorized</option>
+                      <option value="403">403 Forbidden</option>
+                      <option value="404">404 Not Found</option>
+                      <option value="500">500 Server Error</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Error logs list */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                        <th className="pb-3 font-semibold">Timestamp</th>
+                        <th className="pb-3 font-semibold">IP Address</th>
+                        <th className="pb-3 font-semibold">Path</th>
+                        <th className="pb-3 font-semibold w-16">Status</th>
+                        <th className="pb-3 font-semibold truncate max-w-[200px]">User Agent</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-cyber-border/30">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-gray-500">
+                            <div className="flex items-center justify-center gap-2">
+                              <span className="h-4 w-4 animate-spin rounded-full border-2 border-cyber-purple border-t-transparent" />
+                              <span className="font-mono text-xs">Loading error streams...</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : filteredErrorLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-gray-500 font-mono">
+                            No error logs match this view.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredErrorLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-cyber-bg/30 transition-colors">
+                            <td className="py-3 font-mono text-gray-400">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </td>
+                            <td className="py-3 font-mono text-cyber-cyan">{log.ip}</td>
+                            <td className="py-3 font-mono text-gray-200 truncate max-w-[200px]" title={log.endpoint}>
+                              {log.endpoint}
+                            </td>
+                            <td className="py-3">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                {log.status}
+                              </span>
+                            </td>
+                            <td className="py-3 font-mono text-gray-400 truncate max-w-[200px]" title={log.user_agent}>
+                              {log.user_agent}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex justify-between items-center mt-6 border-t border-cyber-border/40 pt-4">
+                  <button
+                    type="button"
+                    disabled={errorLogsPage === 0}
+                    onClick={() => setErrorLogsPage((p) => p - 1)}
+                    className="px-4 py-2 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-[13px] text-gray-400 font-mono">
+                    Page {errorLogsPage + 1}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={errorLogs.length < errorLogsLimit}
+                    onClick={() => setErrorLogsPage((p) => p + 1)}
+                    className="px-4 py-2 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </main>
       </div>
     </div>
