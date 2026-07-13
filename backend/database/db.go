@@ -78,14 +78,37 @@ func InitSchema() {
 		log.Fatal("Failed to initialize users schema: ", err)
 	}
 
-	// 2. Create the logs table (your existing code)
+	// 2. Create the sessions table
+	sessionsQuery := `
+	CREATE TABLE IF NOT EXISTS sessions (
+		id SERIAL PRIMARY KEY,
+		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+		filename TEXT NOT NULL,
+		parsed_count INTEGER NOT NULL,
+		skipped_count INTEGER NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	_, err = DB.Exec(sessionsQuery)
+	if err != nil {
+		log.Fatal("Failed to initialize sessions schema: ", err)
+	}
+
+	// 3. Create the logs table
 	logQuery := `
 	CREATE TABLE IF NOT EXISTS logs (
 		id SERIAL PRIMARY KEY,
 		ip VARCHAR(50),
 		method VARCHAR(10),
 		endpoint TEXT,
+		protocol VARCHAR(50),
 		status INTEGER,
+		timestamp TIMESTAMP,
+		bytes INTEGER,
+		referrer TEXT,
+		user_agent TEXT,
+		response_time INTEGER,
+		session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
 
@@ -94,5 +117,36 @@ func InitSchema() {
 		log.Fatal("Failed to initialize logs schema: ", err)
 	}
 
-	fmt.Println("✅ Database schemas initialized!")
+	// 4. Alter logs table to add missing columns in case it already existed
+	alterQueries := []string{
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS timestamp TIMESTAMP",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS protocol VARCHAR(50)",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS bytes INTEGER",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS referrer TEXT",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS user_agent TEXT",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS response_time INTEGER",
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE",
+	}
+	for _, q := range alterQueries {
+		_, err = DB.Exec(q)
+		if err != nil {
+			log.Println("Note during database migration: ", err)
+		}
+	}
+
+	// 5. Add indexes on timestamp, status, ip for fast aggregation queries
+	indexQueries := []string{
+		"CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp)",
+		"CREATE INDEX IF NOT EXISTS idx_logs_status ON logs(status)",
+		"CREATE INDEX IF NOT EXISTS idx_logs_ip ON logs(ip)",
+		"CREATE INDEX IF NOT EXISTS idx_logs_session_id ON logs(session_id)",
+	}
+	for _, q := range indexQueries {
+		_, err = DB.Exec(q)
+		if err != nil {
+			log.Fatal("Failed to create index: ", err)
+		}
+	}
+
+	fmt.Println("✅ Database schemas initialized and migrated!")
 }

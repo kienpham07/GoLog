@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, type SVGProps } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef, type SVGProps } from "react";
 import {
   BarChart,
   Bar,
@@ -13,6 +13,10 @@ import {
   Area,
   Cell,
   Legend,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
 } from "recharts";
 import { useRouter } from "next/navigation";
 
@@ -20,11 +24,61 @@ import { useRouter } from "next/navigation";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
 
 // 1. Define the TypeScript Interface
+// 1. Define the TypeScript Interfaces
 interface LogEntry {
+  id: number;
   ip: string;
+  timestamp: string;
   method: string;
   endpoint: string;
+  protocol: string;
   status: number;
+  bytes: number;
+  referrer: string;
+  user_agent: string;
+  response_time: number;
+  session_id: number;
+}
+
+interface StatsOverview {
+  total_requests: number;
+  unique_ips: number;
+  error_rate: number;
+  total_bytes: number;
+}
+
+interface TrafficStat {
+  hour: string;
+  count: number;
+}
+
+interface TopEndpoint {
+  endpoint: string;
+  count: number;
+}
+
+interface TopIP {
+  ip: string;
+  count: number;
+  suspicious: boolean;
+}
+
+interface StatusCodeStat {
+  status: number;
+  count: number;
+}
+
+interface BrowserStat {
+  browser: string;
+  count: number;
+}
+
+interface Session {
+  id: number;
+  filename: string;
+  parsed_count: number;
+  skipped_count: number;
+  created_at: string;
 }
 
 function MenuIcon(props: SVGProps<SVGSVGElement>) {
@@ -457,27 +511,6 @@ function Sidebar({ isOpen, onClose, searchQuery, onSearchChange, username }: Sid
               </button>
             </nav>
           </div>
-
-          <div className="flex flex-col items-center gap-4">
-            {/* Settings Icon */}
-            <button
-              type="button"
-              className="h-10 w-10 flex items-center justify-center rounded-lg text-gray-400 hover:bg-cyber-card hover:text-cyber-cyan transition"
-              title="Settings"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-
-            {/* User Avatar */}
-            <img
-              src="/user_avatar.png"
-              alt="Avatar"
-              className="h-9 w-9 rounded-full object-cover ring-2 ring-cyber-purple/30"
-            />
-          </div>
         </div>
 
         {/* Wider Text Menu Sidebar */}
@@ -525,19 +558,6 @@ function Sidebar({ isOpen, onClose, searchQuery, onSearchChange, username }: Sid
                 <span>Dashboard</span>
               </button>
             </nav>
-          </div>
-
-          {/* User profile at the bottom of the wide menu */}
-          <div className="border-t border-cyber-border pt-4 flex items-center gap-3">
-            <img
-              src="/user_avatar.png"
-              alt="Avatar"
-              className="h-8 w-8 rounded-full object-cover ring-1 ring-cyber-purple/20"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-white truncate">{username}</p>
-              <p className="text-[10px] font-medium text-gray-400 truncate">Account settings</p>
-            </div>
           </div>
         </div>
       </aside>
@@ -648,176 +668,262 @@ function TopNavigation({
 
 export default function Home() {
   const router = useRouter();
-  
-  // State variables
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // States
+  const [mounted, setMounted] = useState(false);
   const [username, setUsername] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("golog_username") || "User";
     }
     return "User";
   });
-  const [mounted, setMounted] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState(""); // top bar search
+
+  // Aggregation States
+  const [selectedSessionID, setSelectedSessionID] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [overview, setOverview] = useState<StatsOverview | null>(null);
+  const [traffic, setTraffic] = useState<TrafficStat[]>([]);
+  const [topPages, setTopPages] = useState<TopEndpoint[]>([]);
+  const [topIps, setTopIps] = useState<TopIP[]>([]);
+  const [statusCodes, setStatusCodes] = useState<StatusCodeStat[]>([]);
+  const [browsers, setBrowsers] = useState<BrowserStat[]>([]);
+  
+  // Paginated Error Logs
+  const [errorLogs, setErrorLogs] = useState<LogEntry[]>([]);
+  const [errorLogsPage, setErrorLogsPage] = useState(0);
+  const [errorLogsLimit] = useState(10);
+  const [errorSearchQuery, setErrorSearchQuery] = useState("");
+  const [errorStatusCodeFilter, setErrorStatusCodeFilter] = useState("All");
+
+  // Upload States
+  const [uploadStatus, setUploadStatus] = useState<{
+    parsed_count: number;
+    skipped_count: number;
+    date_range: string;
+    filename: string;
+  } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Fetch Sessions list
+  const fetchSessions = useCallback(() => {
+    const token = localStorage.getItem("golog_token");
+    if (!token) return;
 
-  // Fetch logs
-  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/sessions`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setSessions(data))
+      .catch((err) => console.error("Error fetching sessions:", err));
+  }, []);
+
+  // Fetch Stats Overview & Charts
+  const fetchDashboardData = useCallback(() => {
     const token = localStorage.getItem("golog_token");
     if (!token) {
       router.push("/login");
       return;
     }
 
-    fetch(`${API_BASE_URL}/api/logs`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+    setLoading(true);
+    const sessionQuery = selectedSessionID !== null ? `?session_id=${selectedSessionID}` : "";
+
+    const overviewPromise = fetch(`${API_BASE_URL}/api/stats/overview${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => {
         if (res.status === 401) {
           localStorage.removeItem("golog_token");
           router.push("/login");
-          return;
+          return null;
         }
-        return res.json();
-      })
-      .then((data) => {
-        if (data) {
-          setLogs(data);
-        }
+        return res.ok ? res.json() : null;
+      });
+
+    const trafficPromise = fetch(`${API_BASE_URL}/api/stats/traffic${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => (res.ok ? res.json() : []));
+
+    const topEndpointsPromise = fetch(`${API_BASE_URL}/api/stats/top-endpoints${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => (res.ok ? res.json() : []));
+
+    const topIpsPromise = fetch(`${API_BASE_URL}/api/stats/top-ips${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => (res.ok ? res.json() : []));
+
+    const statusCodesPromise = fetch(`${API_BASE_URL}/api/stats/status-codes${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => (res.ok ? res.json() : []));
+
+    const browsersPromise = fetch(`${API_BASE_URL}/api/stats/browsers${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => (res.ok ? res.json() : []));
+
+    Promise.all([
+      overviewPromise,
+      trafficPromise,
+      topEndpointsPromise,
+      topIpsPromise,
+      statusCodesPromise,
+      browsersPromise,
+    ])
+      .then(([overviewData, trafficData, topEndpointsData, topIpsData, statusCodesData, browsersData]) => {
+        if (overviewData) setOverview(overviewData);
+        setTraffic(trafficData);
+        setTopPages(topEndpointsData);
+        setTopIps(topIpsData);
+        setStatusCodes(statusCodesData);
+        setBrowsers(browsersData);
         setLoading(false);
       })
       .catch((err) => {
-        console.error("Failed to fetch logs:", err);
+        console.error("Failed to load dashboard data:", err);
         setLoading(false);
       });
-  }, [router]);
+  }, [selectedSessionID, router]);
 
-  // Filter logs based on search and status
-  const filteredLogs = useMemo(() => {
-    return logs.filter((log) => {
+  // Fetch Error Logs
+  const fetchErrorLogsData = useCallback(() => {
+    const token = localStorage.getItem("golog_token");
+    if (!token) return;
+
+    const sessionQuery = selectedSessionID !== null ? `&session_id=${selectedSessionID}` : "";
+    const offset = errorLogsPage * errorLogsLimit;
+
+    fetch(`${API_BASE_URL}/api/logs/errors?limit=${errorLogsLimit}&offset=${offset}${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setErrorLogs(data))
+      .catch((err) => console.error("Error fetching error logs:", err));
+  }, [selectedSessionID, errorLogsPage, errorLogsLimit]);
+
+  // Trigger data loading
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  useEffect(() => {
+    fetchErrorLogsData();
+  }, [fetchErrorLogsData]);
+
+  // File Upload Handler
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Check file extension
+    if (!file.name.toLowerCase().endsWith(".log")) {
+      setUploadError("Only .log files are allowed.");
+      return;
+    }
+
+    const token = localStorage.getItem("golog_token");
+    if (!token) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    setIsUploading(true);
+    setUploadError(null);
+    setUploadStatus(null);
+
+    fetch(`${API_BASE_URL}/api/upload`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to upload file");
+        }
+        return data;
+      })
+      .then((data) => {
+        setUploadStatus({
+          parsed_count: data.parsed_count,
+          skipped_count: data.skipped_count,
+          date_range: data.date_range,
+          filename: data.filename,
+        });
+        setSelectedSessionID(data.session_id);
+        fetchSessions(); // refresh session list
+      })
+      .catch((err) => {
+        setUploadError(err.message);
+      })
+      .finally(() => {
+        setIsUploading(false);
+      });
+  };
+
+  // Filter error logs client-side by search and status code
+  const filteredErrorLogs = useMemo(() => {
+    return errorLogs.filter((log) => {
       const matchesSearch =
-        log.endpoint.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        log.ip.includes(searchQuery);
-
+        log.endpoint.toLowerCase().includes(errorSearchQuery.toLowerCase()) ||
+        log.ip.includes(errorSearchQuery);
       const matchesStatus =
-        statusFilter === "All" || log.status.toString() === statusFilter;
-
+        errorStatusCodeFilter === "All" || log.status.toString() === errorStatusCodeFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [logs, searchQuery, statusFilter]);
+  }, [errorLogs, errorSearchQuery, errorStatusCodeFilter]);
 
-  // Process data for the HTTP Methods Bar Chart
-  const methodData = useMemo(() => {
-    const counts: Record<string, number> = {};
-    filteredLogs.forEach((log) => {
-      counts[log.method] = (counts[log.method] || 0) + 1;
+  // Pie chart data grouping
+  const pieData = useMemo(() => {
+    const groups = { "2xx": 0, "3xx": 0, "4xx": 0, "5xx": 0 };
+    statusCodes.forEach((item) => {
+      if (item.status >= 200 && item.status < 300) groups["2xx"] += item.count;
+      else if (item.status >= 300 && item.status < 400) groups["3xx"] += item.count;
+      else if (item.status >= 400 && item.status < 500) groups["4xx"] += item.count;
+      else if (item.status >= 500) groups["5xx"] += item.count;
     });
-    return Object.keys(counts).map((key) => ({
-      name: key,
-      count: counts[key],
-    }));
-  }, [filteredLogs]);
-
-  // Process data for Success Trends Area Chart
-  const successTrendsData = useMemo(() => {
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const data = months.map((month) => ({
-      name: month,
-      Success: 0,
-      PastFulfillment: 0,
-    }));
-
-    if (logs.length > 0) {
-      logs.forEach((log, index) => {
-        const monthIdx = index % 12;
-        const isSuccess = log.status < 400;
-        if (isSuccess) {
-          data[monthIdx].Success += 10;
-        } else {
-          data[monthIdx].Success += 2;
-        }
-        data[monthIdx].PastFulfillment += isSuccess ? 8 : 4;
-      });
-    } else {
-      months.forEach((month, index) => {
-        data[index].Success = [40, 55, 68, 80, 75, 90, 85, 95, 100, 110, 105, 120][index];
-        data[index].PastFulfillment = [35, 50, 60, 70, 72, 85, 80, 90, 95, 100, 102, 115][index];
-      });
-    }
-    return data;
-  }, [logs]);
-
-  // Calculate top endpoints
-  const topEndpoints = useMemo(() => {
-    const counts: Record<string, number> = {};
-    logs.forEach((log) => {
-      counts[log.endpoint] = (counts[log.endpoint] || 0) + 1;
-    });
-    const sorted = Object.entries(counts)
-      .map(([path, count]) => ({ path, count }))
-      .sort((a, b) => b.count - a.count);
-    
-    const maxCount = sorted.length > 0 ? sorted[0].count : 1;
-    return sorted.slice(0, 5).map((item, index) => ({
-      index: index + 1,
-      path: item.path,
-      count: item.count,
-      percentage: Math.round((item.count / maxCount) * 100),
-    }));
-  }, [logs]);
-
-  // Compute metrics
-  const totalRequests = logs.length;
-  const successRequests = logs.filter((log) => log.status < 400).length;
-  const failedRequests = logs.filter((log) => log.status >= 400).length;
-  const uniqueClients = new Set(logs.map((log) => log.ip)).size;
+    return Object.entries(groups).map(([name, value]) => ({ name, value }));
+  }, [statusCodes]);
 
   const formatCount = (num: number) => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+    }
     if (num >= 1000) {
       return (num / 1000).toFixed(1).replace(/\.0$/, "") + "K";
     }
     return num.toString();
   };
 
-  const metricCards = [
-    {
-      title: "Total Requests",
-      value: formatCount(totalRequests),
-      percentage: "12.5%",
-      isPositive: true,
-      label: "vs last week",
-    },
-    {
-      title: "Success Requests",
-      value: formatCount(successRequests),
-      percentage: "14.2%",
-      isPositive: true,
-      label: "vs last week",
-    },
-    {
-      title: "Failed Requests",
-      value: formatCount(failedRequests),
-      percentage: "8.3%",
-      isPositive: false,
-      label: "vs last week",
-    },
-    {
-      title: "Unique Clients",
-      value: formatCount(uniqueClients),
-      percentage: "5.1%",
-      isPositive: true,
-      label: "vs last week",
-    },
-  ];
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const formatHour = (tick: any) => {
+    try {
+      const d = new Date(tick);
+      return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    } catch {
+      return String(tick);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem("golog_token");
@@ -845,315 +951,546 @@ export default function Home() {
         />
 
         <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto">
-          {/* Top Title Section */}
-          <div className="mb-8 flex items-center justify-between">
+          {/* Top Title & Actions Section */}
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-extrabold text-white tracking-wide">
-                Analytics
+                Dashboard Analytics
               </h1>
-              <p className="text-xs text-gray-400 font-mono mt-1 uppercase tracking-wider text-[10px]">Real-time log analyzer database stream</p>
+              <p className="text-xs text-gray-400 font-mono mt-1 uppercase tracking-wider text-[10px]">
+                Real-time log analyzer database stream
+              </p>
             </div>
-            
-            {/* Calendar Indicator */}
-            <div className="flex items-center gap-2">
+
+            {/* Actions: Session Select, Hidden File Input, Upload Button */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Session Filter Dropdown */}
+              <div className="relative">
+                <select
+                  value={selectedSessionID !== null ? selectedSessionID : ""}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedSessionID(val ? Number(val) : null);
+                  }}
+                  className="appearance-none bg-cyber-card border border-cyber-border rounded-lg text-xs font-bold text-gray-300 pl-4 pr-10 py-2.5 outline-none cursor-pointer hover:border-cyber-purple/65 hover:text-white transition shadow-sm"
+                  aria-label="Filter by log upload session"
+                >
+                  <option value="">All Upload Sessions</option>
+                  {sessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.filename} ({formatCount(s.parsed_count)} lines)
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
+                  <ChevronDownIcon className="h-3 w-3" />
+                </div>
+              </div>
+
+              {/* Upload file UI */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept=".log"
+                className="hidden"
+              />
               <button
                 type="button"
-                className="flex items-center gap-2 bg-cyber-purple hover:bg-cyber-purple/90 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-[0_0_12px_rgba(137,81,255,0.4)]"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="flex items-center gap-2 bg-cyber-purple hover:bg-cyber-purple/90 text-white px-4 py-2.5 rounded-lg text-xs font-bold transition shadow-[0_0_12px_rgba(137,81,255,0.4)] disabled:opacity-50"
               >
-                <CalendarIcon className="h-3.5 w-3.5 text-cyber-cyan" />
-                <span>July 2026</span>
-                <ChevronDownIcon className="h-3 w-3" />
+                {isUploading ? (
+                  <>
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span>Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="h-3.5 w-3.5 text-cyber-cyan"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                      />
+                    </svg>
+                    <span>Upload Log</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
 
-          {/* Metric Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {metricCards.map((card) => (
-              <div
-                key={card.title}
-                className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-[0_4px_20px_rgba(0,0,0,0.25)] hover:border-cyber-purple/40 hover:shadow-[0_4px_25px_rgba(137,81,255,0.08)] transition-all duration-300 flex flex-col justify-between"
+          {/* 1. Upload Success / Error Banner */}
+          {uploadStatus && (
+            <div className="mb-8 p-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.05)] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">✅</span>
+                <span>
+                  Parsed <strong>{uploadStatus.parsed_count}</strong> lines · <strong>{uploadStatus.skipped_count}</strong> errors skipped · <strong>{uploadStatus.date_range}</strong>
+                </span>
+              </div>
+              <button
+                onClick={() => setUploadStatus(null)}
+                className="text-emerald-400 hover:text-emerald-300 font-bold ml-4 focus:outline-none"
               >
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">{card.title}</span>
-                    <span className="text-gray-500 hover:text-cyber-cyan cursor-pointer transition">•••</span>
-                  </div>
-                  <div className="text-3xl font-extrabold text-white tracking-tight">
-                    {card.value}
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center gap-2">
-                  <span
-                    className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-bold border ${
-                      card.title === "Failed Requests"
-                        ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
-                        : "bg-cyber-cyan/10 text-cyber-cyan border-cyber-cyan/20"
-                    }`}
-                  >
-                    {card.title === "Failed Requests" ? "↓" : "↑"} {card.percentage}
-                  </span>
-                  <span className="text-xs text-gray-400 font-mono">{card.label}</span>
+                ✕
+              </button>
+            </div>
+          )}
+
+          {uploadError && (
+            <div className="mb-8 p-4 bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⚠️</span>
+                <span>{uploadError}</span>
+              </div>
+              <button
+                onClick={() => setUploadError(null)}
+                className="text-rose-400 hover:text-rose-300 font-bold ml-4 focus:outline-none"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* 2. Overview cards (row of 4) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+              <div>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                  Total Requests
+                </span>
+                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
+                  {loading ? "..." : formatCount(overview?.total_requests || 0)}
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Charts & Tables Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            {/* Left Column: Top Endpoints Table */}
-            <div className="flex flex-col gap-8">
-              <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-col justify-between h-full">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-white">Top Endpoints</h3>
-                    <span className="text-gray-500 hover:text-cyber-cyan cursor-pointer transition">•••</span>
-                  </div>
-                  <p className="text-xs text-gray-400 font-mono mb-6">Most frequently requested paths</p>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-cyber-border text-gray-400 font-mono">
-                          <th className="pb-3 font-semibold w-12">#</th>
-                          <th className="pb-3 font-semibold">Path Name</th>
-                          <th className="pb-3 font-semibold w-32">Popularity</th>
-                          <th className="pb-3 font-semibold text-right">Total Requests</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {topEndpoints.length === 0 ? (
-                          <tr>
-                            <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
-                              No log data available.
-                            </td>
-                          </tr>
-                        ) : (
-                          topEndpoints.map((item) => (
-                            <tr key={item.index} className="border-b border-cyber-border/40 hover:bg-cyber-bg/50 transition-colors">
-                              <td className="py-4 font-mono text-gray-400">{item.index}</td>
-                              <td className="py-4 font-mono text-cyber-cyan font-medium truncate max-w-[160px]">{item.path}</td>
-                              <td className="py-4">
-                                <div className="w-full bg-cyber-dark/80 h-2 rounded-full overflow-hidden border border-cyber-border/40">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ${
-                                      item.index === 1 ? 'bg-gradient-to-r from-cyber-blue to-cyber-cyan shadow-[0_0_8px_rgba(33,195,252,0.4)]' :
-                                      item.index === 2 ? 'bg-cyber-cyan shadow-[0_0_6px_rgba(33,195,252,0.25)]' :
-                                      item.index === 3 ? 'bg-cyber-purple shadow-[0_0_6px_rgba(137,81,255,0.25)]' :
-                                      'bg-cyber-purple/55'
-                                    }`}
-                                    style={{ width: `${item.percentage}%` }}
-                                  />
-                                </div>
-                              </td>
-                              <td className="py-4 font-mono text-right font-bold text-white">{item.count}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+              <div className="mt-4 text-[10px] text-gray-500 font-mono">
+                Total parsed request lines
               </div>
             </div>
 
-            {/* Right Column: Bar Chart & Success Trends Chart */}
-            <div className="flex flex-col gap-8">
-              {/* Level Bar Chart */}
-              <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-white">Level</h3>
-                    <span className="text-gray-500 hover:text-cyber-cyan cursor-pointer transition">•••</span>
-                  </div>
-                  <p className="text-xs text-gray-400 font-mono mb-6">Requests by HTTP Method</p>
+            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+              <div>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                  Unique Visitors
+                </span>
+                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
+                  {loading ? "..." : formatCount(overview?.unique_ips || 0)}
+                </div>
+              </div>
+              <div className="mt-4 text-[10px] text-gray-500 font-mono">
+                Distinct visitor IP addresses
+              </div>
+            </div>
 
-                  <div className="h-64 mt-2">
-                    {mounted ? (
+            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+              <div>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                  Error Rate
+                </span>
+                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
+                  {loading
+                    ? "..."
+                    : ((overview?.error_rate || 0) * 100).toFixed(2) + "%"}
+                </div>
+              </div>
+              <div className="mt-4 text-[10px] text-gray-500 font-mono">
+                Ratio of status codes &gt;= 400
+              </div>
+            </div>
+
+            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between hover:border-cyber-purple/35 transition-all">
+              <div>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-mono">
+                  Total Bandwidth
+                </span>
+                <div className="text-3xl font-extrabold text-white tracking-tight mt-2">
+                  {loading ? "..." : formatBytes(Number(overview?.total_bytes || 0))}
+                </div>
+              </div>
+              <div className="mt-4 text-[10px] text-gray-500 font-mono">
+                Sum of response bytes sent
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Row: 3. Traffic line chart & 4. Status code pie chart */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            {/* 3. Traffic Line Chart (col-span-2) */}
+            <div className="lg:col-span-2 bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+              <h3 className="text-base font-bold text-white mb-1">Traffic Over Time</h3>
+              <p className="text-xs text-gray-400 font-mono mb-6">Aggregated requests by hour</p>
+              <div className="h-72">
+                {mounted && !loading ? (
+                  traffic.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
+                      No traffic data available
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={traffic} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" vertical={false} />
+                        <XAxis
+                          dataKey="hour"
+                          stroke="#4b5563"
+                          fontSize={9}
+                          tickLine={false}
+                          tickFormatter={formatHour}
+                          className="font-mono"
+                        />
+                        <YAxis stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#121620",
+                            borderColor: "#1E2530",
+                            borderRadius: "8px",
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                          }}
+                          labelStyle={{ color: "#fff" }}
+                          labelFormatter={formatHour}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="count"
+                          stroke="#21C3FC"
+                          strokeWidth={2}
+                          activeDot={{ r: 6 }}
+                          name="Requests"
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )
+                ) : (
+                  <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
+                )}
+              </div>
+            </div>
+
+            {/* 4. Status Code breakdown Donut chart */}
+            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white mb-1">Status Codes</h3>
+                <p className="text-xs text-gray-400 font-mono mb-6">Breakdown of response classes</p>
+                <div className="h-60 flex items-center justify-center">
+                  {mounted && !loading ? (
+                    statusCodes.length === 0 ? (
+                      <div className="text-gray-500 font-mono text-xs">No data available</div>
+                    ) : (
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={methodData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" vertical={false} />
-                          <XAxis dataKey="name" stroke="#4b5563" fontSize={11} tickLine={false} className="font-mono" />
-                          <YAxis allowDecimals={false} stroke="#4b5563" fontSize={11} tickLine={false} className="font-mono" />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: "#121620", borderColor: "#1E2530", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
-                            labelStyle={{ color: "#fff" }}
-                            itemStyle={{ color: "#8951FF" }}
-                            cursor={{ fill: "rgba(137, 81, 255, 0.05)" }}
-                          />
-                          <Bar dataKey="count" radius={[4, 4, 0, 0]} barSize={32}>
-                            {methodData.map((entry, index) => {
-                              const colors = ["#8951FF", "#21C3FC", "#0E43FB", "#a855f7", "#ec4899"];
+                        <PieChart>
+                          <Pie
+                            data={pieData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={55}
+                            outerRadius={75}
+                            paddingAngle={4}
+                            dataKey="value"
+                          >
+                            {pieData.map((entry, index) => {
+                              const colors = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444"];
                               return (
                                 <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
                               );
                             })}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full w-full bg-cyber-bg animate-pulse rounded-lg" />
-                    )}
-                  </div>
-
-                </div>
-              </div>
-
-              {/* Customer Fulfilment Success Trends Chart */}
-              <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-[0_4px_20px_rgba(0,0,0,0.25)] flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-bold text-white">Customer Fulfilment</h3>
-                    <span className="text-gray-500 hover:text-cyber-cyan cursor-pointer transition">•••</span>
-                  </div>
-                  <p className="text-xs text-gray-400 font-mono mb-6">Success vs past fulfillment trends</p>
-
-                  <div className="h-64 mt-2">
-                    {mounted ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={successTrendsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                          <defs>
-                            <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#21C3FC" stopOpacity={0.4} />
-                              <stop offset="95%" stopColor="#21C3FC" stopOpacity={0} />
-                            </linearGradient>
-                            <linearGradient id="colorPast" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#8951FF" stopOpacity={0.4} />
-                              <stop offset="95%" stopColor="#8951FF" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" vertical={false} />
-                          <XAxis dataKey="name" stroke="#4b5563" fontSize={11} tickLine={false} className="font-mono" />
-                          <YAxis stroke="#4b5563" fontSize={11} tickLine={false} className="font-mono" />
+                          </Pie>
                           <Tooltip
-                            contentStyle={{ backgroundColor: "#121620", borderColor: "#1E2530", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}
-                            labelStyle={{ color: "#fff" }}
+                            contentStyle={{
+                              backgroundColor: "#121620",
+                              borderColor: "#1E2530",
+                              borderRadius: "8px",
+                            }}
                           />
-                          <Legend verticalAlign="top" height={36} iconType="circle" />
-                          <Area
-                            type="monotone"
-                            dataKey="Success"
-                            stroke="#21C3FC"
-                            strokeWidth={2}
-                            fillOpacity={1}
-                            fill="url(#colorSuccess)"
-                            name="Success Trends"
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="PastFulfillment"
-                            stroke="#8951FF"
-                            strokeWidth={2}
-                            fillOpacity={1}
-                            fill="url(#colorPast)"
-                            name="Past Fulfilment"
-                          />
-                        </AreaChart>
+                          <Legend verticalAlign="bottom" iconType="circle" fontSize={11} />
+                        </PieChart>
                       </ResponsiveContainer>
-                    ) : (
-                      <div className="h-full w-full bg-cyber-bg animate-pulse rounded-lg" />
-                    )}
-                  </div>
-
+                    )
+                  ) : (
+                    <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Log Explorer Card */}
-          <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-[0_4px_20px_rgba(0,0,0,0.25)] mb-8">
+          {/* Tables Row: 5. Top pages & 6. Top IPs */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {/* 5. Top Pages Table */}
+            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+              <h3 className="text-base font-bold text-white mb-1">Top Pages</h3>
+              <p className="text-xs text-gray-400 font-mono mb-4">Most frequently requested paths</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                      <th className="pb-3 font-semibold w-12">Rank</th>
+                      <th className="pb-3 font-semibold">Path</th>
+                      <th className="pb-3 font-semibold text-right">Hits</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                          Loading top pages...
+                        </td>
+                      </tr>
+                    ) : topPages.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                          No page logs found
+                        </td>
+                      </tr>
+                    ) : (
+                      topPages.map((item, index) => (
+                        <tr
+                          key={index}
+                          className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
+                        >
+                          <td className="py-3 font-mono text-gray-400">{index + 1}</td>
+                          <td className="py-3 font-mono text-cyber-cyan truncate max-w-[280px]">
+                            {item.endpoint}
+                          </td>
+                          <td className="py-3 font-mono text-right font-bold text-white">
+                            {formatCount(item.count)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 6. Top IPs Table */}
+            <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+              <h3 className="text-base font-bold text-white mb-1">Top IPs</h3>
+              <p className="text-xs text-gray-400 font-mono mb-4">Most active visitor addresses</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                      <th className="pb-3 font-semibold w-12">Rank</th>
+                      <th className="pb-3 font-semibold">IP Address</th>
+                      <th className="pb-3 font-semibold text-right">Requests</th>
+                      <th className="pb-3 font-semibold text-right w-24">Security</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
+                          Loading top IPs...
+                        </td>
+                      </tr>
+                    ) : topIps.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
+                          No IP logs found
+                        </td>
+                      </tr>
+                    ) : (
+                      topIps.map((item, index) => (
+                        <tr
+                          key={index}
+                          className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
+                        >
+                          <td className="py-3 font-mono text-gray-400">{index + 1}</td>
+                          <td className="py-3 font-mono text-gray-300">{item.ip}</td>
+                          <td className="py-3 font-mono text-right font-bold text-white">
+                            {formatCount(item.count)}
+                          </td>
+                          <td className="py-3 text-right">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                item.suspicious
+                                  ? "bg-rose-500/15 text-rose-400 border-rose-500/25"
+                                  : "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
+                              }`}
+                            >
+                              {item.suspicious ? "Suspicious" : "Clean"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* 7. Error Log Table */}
+          <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm mb-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
               <div>
-                <h3 className="text-lg font-bold text-white">Log Explorer</h3>
-                <p className="text-xs text-gray-400 font-mono mt-1">{filteredLogs.length} matching requests found</p>
+                <h3 className="text-base font-bold text-white">Error Logs</h3>
+                <p className="text-xs text-gray-400 font-mono mt-1">
+                  {filteredErrorLogs.length} matches in current view (status &gt;= 400)
+                </p>
               </div>
 
-              {/* Status Code Filter */}
-              <div className="flex items-center gap-3">
+              {/* Error Filtering & Searching */}
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="text"
+                  placeholder="Search error path..."
+                  value={errorSearchQuery}
+                  onChange={(e) => setErrorSearchQuery(e.target.value)}
+                  className="bg-cyber-bg border border-cyber-border rounded-lg text-xs text-gray-300 px-3 py-2 outline-none focus:border-cyber-purple transition w-44"
+                />
+
                 <select
-                  aria-label="Filter by status code"
-                  className="h-10 rounded-lg border border-cyber-border bg-cyber-bg px-3 text-xs font-semibold text-gray-300 outline-none transition focus:border-cyber-purple focus:ring-2 focus:ring-cyber-purple/20 cursor-pointer"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
+                  value={errorStatusCodeFilter}
+                  onChange={(e) => setErrorStatusCodeFilter(e.target.value)}
+                  className="bg-cyber-bg border border-cyber-border rounded-lg text-xs font-semibold text-gray-300 px-3 py-2 outline-none cursor-pointer hover:border-cyber-purple transition"
+                  aria-label="Filter error logs by status code"
                 >
-                  <option value="All">All Status Codes</option>
-                  <option value="200">200 OK</option>
+                  <option value="All">All Error Codes</option>
+                  <option value="400">400 Bad Request</option>
+                  <option value="401">401 Unauthorized</option>
+                  <option value="403">403 Forbidden</option>
                   <option value="404">404 Not Found</option>
                   <option value="500">500 Server Error</option>
                 </select>
               </div>
             </div>
 
-            {/* Logs Table */}
+            {/* Error logs list */}
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-cyber-border text-gray-400 font-mono text-xs">
+                  <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                    <th className="pb-3 font-semibold">Timestamp</th>
                     <th className="pb-3 font-semibold">IP Address</th>
-                    <th className="pb-3 font-semibold">Method</th>
-                    <th className="pb-3 font-semibold">Endpoint</th>
-                    <th className="pb-3 font-semibold">Status</th>
+                    <th className="pb-3 font-semibold">Path</th>
+                    <th className="pb-3 font-semibold w-16">Status</th>
+                    <th className="pb-3 font-semibold truncate max-w-[200px]">User Agent</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-cyber-border/40">
+                <tbody className="divide-y divide-cyber-border/30">
                   {loading ? (
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-gray-500">
+                      <td colSpan={5} className="py-8 text-center text-gray-500">
                         <div className="flex items-center justify-center gap-2">
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-cyber-purple border-t-transparent" />
-                          <span className="font-mono text-xs">Loading logs from database...</span>
+                          <span className="font-mono text-xs">Loading error streams...</span>
                         </div>
                       </td>
                     </tr>
-                  ) : filteredLogs.length === 0 ? (
+                  ) : filteredErrorLogs.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-8 text-center text-gray-500 font-mono text-xs">
-                        No logs match your search criteria.
+                      <td colSpan={5} className="py-8 text-center text-gray-500 font-mono">
+                        No error logs match this view.
                       </td>
                     </tr>
                   ) : (
-                    filteredLogs.map((log, index) => (
-                      <tr
-                        key={index}
-                        className="hover:bg-cyber-bg/40 transition-colors"
-                      >
-                        <td className="py-4 font-mono text-xs text-cyber-cyan">
-                          {log.ip}
+                    filteredErrorLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-cyber-bg/30 transition-colors">
+                        <td className="py-3 font-mono text-gray-400">
+                          {new Date(log.timestamp).toLocaleString()}
                         </td>
-                        <td className="py-4">
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
-                              log.method === "GET"
-                                ? "bg-cyber-blue/15 text-cyber-cyan border border-cyber-cyan/20"
-                                : log.method === "POST"
-                                  ? "bg-cyber-purple/15 text-cyber-purple border border-cyber-purple/20"
-                                  : "bg-cyber-border text-gray-400 border border-cyber-border/50"
-                            }`}
-                          >
-                            {log.method}
-                          </span>
-                        </td>
-                        <td className="py-4 font-mono text-xs text-gray-200">
+                        <td className="py-3 font-mono text-cyber-cyan">{log.ip}</td>
+                        <td className="py-3 font-mono text-gray-200 truncate max-w-[200px]" title={log.endpoint}>
                           {log.endpoint}
                         </td>
-                        <td className="py-4">
-                          <span
-                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                              log.status >= 500
-                                ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                : log.status >= 400
-                                  ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                  : "bg-cyber-cyan/10 text-cyber-cyan border border-cyber-cyan/20"
-                            }`}
-                          >
-                            {log.status >= 500 ? "• 500 Server Error" : log.status >= 400 ? "• 404 Not Found" : "• 200 OK"}
+                        <td className="py-3">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                            {log.status}
                           </span>
+                        </td>
+                        <td className="py-3 font-mono text-gray-400 truncate max-w-[200px]" title={log.user_agent}>
+                          {log.user_agent}
                         </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex justify-between items-center mt-6 border-t border-cyber-border/40 pt-4">
+              <button
+                type="button"
+                disabled={errorLogsPage === 0}
+                onClick={() => setErrorLogsPage((p) => p - 1)}
+                className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[10px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
+              >
+                Previous
+              </button>
+              <span className="text-[11px] text-gray-500 font-mono">
+                Page {errorLogsPage + 1}
+              </span>
+              <button
+                type="button"
+                disabled={errorLogs.length < errorLogsLimit}
+                onClick={() => setErrorLogsPage((p) => p + 1)}
+                className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[10px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
+          {/* 8. Browser Breakdown Chart */}
+          <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+            <h3 className="text-base font-bold text-white mb-1">Browsers</h3>
+            <p className="text-xs text-gray-400 font-mono mb-6">Aggregate requests by visitor agent browser type</p>
+            <div className="h-72">
+              {mounted && !loading ? (
+                browsers.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
+                    No browser data available
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={browsers}
+                      layout="vertical"
+                      margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" horizontal={false} />
+                      <XAxis type="number" stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
+                      <YAxis
+                        type="category"
+                        dataKey="browser"
+                        stroke="#4b5563"
+                        fontSize={9}
+                        tickLine={false}
+                        className="font-mono"
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#121620",
+                          borderColor: "#1E2530",
+                          borderRadius: "8px",
+                          boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                        }}
+                      />
+                      <Bar dataKey="count" fill="#8951FF" radius={[0, 4, 4, 0]} barSize={16}>
+                        {browsers.map((entry, index) => {
+                          const colors = ["#8951FF", "#21C3FC", "#10B981", "#F59E0B", "#EF4444"];
+                          return (
+                            <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                          );
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )
+              ) : (
+                <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
+              )}
             </div>
           </div>
         </main>

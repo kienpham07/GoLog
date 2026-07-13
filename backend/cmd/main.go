@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -114,11 +116,32 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"token": token})
 	})
 
-	// New File Upload Endpoint
-	router.POST("/api/upload", func(c *gin.Context) {
+	// Protected File Upload Endpoint
+	router.POST("/api/upload", middleware.AuthRequired(), func(c *gin.Context) {
 		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxRequestBodySize)
 
-		// 1. Retrieve the file from the form data (key must be "file")
+		// 1. Retrieve current user and verify existence
+		username := c.GetString("username")
+		user, err := database.GetUserByUsername(username)
+		if err != nil {
+			log.Println("Error verifying user for upload:", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user session"})
+			return
+		}
+
+		// 2. Rate limit check: 5 uploads per user per hour
+		count, err := database.GetUploadCountInLastHour(user.ID)
+		if err != nil {
+			log.Println("Error checking upload count:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check upload limits"})
+			return
+		}
+		if count >= 5 {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Rate limit exceeded. Maximum 5 uploads per hour allowed."})
+			return
+		}
+
+		// 3. Retrieve the file from the form data
 		file, err := c.FormFile("file")
 		if err != nil {
 			var maxBytesErr *http.MaxBytesError
@@ -134,51 +157,262 @@ func main() {
 			return
 		}
 
-		// 2. Define where to save the file
-		// We use filepath.Base to prevent path traversal attacks
+		// File type validation - reject uploads where the file does not have a .log extension or plain text content type
+		ext := strings.ToLower(filepath.Ext(file.Filename))
+		contentType := file.Header.Get("Content-Type")
+		if ext != ".log" || (contentType != "text/plain" && !strings.HasPrefix(contentType, "text/")) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid file type. Only .log files with plain text content type are allowed."})
+			return
+		}
+
+		// 4. Define where to save the file
 		filename := filepath.Base(file.Filename)
 		destination := "./uploads/" + filename
 
-		// 3. Save the uploaded file to the destination
+		// 5. Save the uploaded file to the destination
 		if err := c.SaveUploadedFile(file, destination); err != nil {
 			log.Println("Error saving file:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save file"})
 			return
 		}
 
-		// After saving, parse the file!
-		parsedLogs, err := services.ParseLogFile(destination)
+		// 6. Parse the file
+		parsedLogs, skippedCount, err := services.ParseLogFile(destination)
 		if err != nil {
 			log.Println("Error parsing file:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse log file"})
 			return
 		}
 
-		// Save the parsed logs to the database!
-		err = database.InsertLogEntries(parsedLogs)
+		// 7. Create database upload session
+		sessionID, err := database.CreateSession(user.ID, filename, len(parsedLogs), skippedCount)
 		if err != nil {
-			log.Println("Error saving to database:", err)
+			log.Println("Error creating upload session:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create upload session"})
+			return
+		}
+
+		// 8. Save the parsed logs to the database
+		err = database.InsertLogEntries(parsedLogs, sessionID)
+		if err != nil {
+			log.Println("Error saving logs to database:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save logs"})
 			return
 		}
 
-		// Return a success response
+		// Calculate date range from parsed logs
+		dateRange := "N/A"
+		if len(parsedLogs) > 0 {
+			minTime := parsedLogs[0].Timestamp
+			maxTime := parsedLogs[0].Timestamp
+			for _, entry := range parsedLogs {
+				if entry.Timestamp.Before(minTime) {
+					minTime = entry.Timestamp
+				}
+				if entry.Timestamp.After(maxTime) {
+					maxTime = entry.Timestamp
+				}
+			}
+			dateRange = minTime.Format("02/Jan/2006 15:04:05") + " - " + maxTime.Format("02/Jan/2006 15:04:05")
+		}
+
+		// Return success response
 		c.JSON(http.StatusOK, gin.H{
-			"message":      "File uploaded and parsed successfully",
-			"filename":     filename,
-			"parsed_count": len(parsedLogs),
+			"message":       "File uploaded and parsed successfully",
+			"filename":      filename,
+			"parsed_count":  len(parsedLogs),
+			"skipped_count": skippedCount,
+			"session_id":    sessionID,
+			"date_range":    dateRange,
 		})
 	})
 
 	// Get Logs Endpoint
 	router.GET("/api/logs", middleware.AuthRequired(), func(c *gin.Context) {
-		logs, err := database.GetLogs()
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		logs, err := database.GetLogs(sessionID)
 		if err != nil {
 			log.Println("Error fetching logs:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch logs"})
 			return
 		}
 
+		c.JSON(http.StatusOK, logs)
+	})
+
+	// Get Sessions Endpoint
+	router.GET("/api/sessions", middleware.AuthRequired(), func(c *gin.Context) {
+		username := c.GetString("username")
+		user, err := database.GetUserByUsername(username)
+		if err != nil {
+			log.Println("Error verifying user for sessions:", err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user session"})
+			return
+		}
+
+		sessions, err := database.GetSessions(user.ID)
+		if err != nil {
+			log.Println("Error fetching sessions:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch sessions"})
+			return
+		}
+
+		c.JSON(http.StatusOK, sessions)
+	})
+
+	// --------------------------------------------------------
+	// AGGREGATION STATS ENDPOINTS
+	// --------------------------------------------------------
+
+	// Stats Overview Endpoint
+	router.GET("/api/stats/overview", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		stats, err := database.GetStatsOverview(sessionID)
+		if err != nil {
+			log.Println("Error fetching overview stats:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch overview stats"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// Traffic Over Time Endpoint
+	router.GET("/api/stats/traffic", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		stats, err := database.GetTrafficStats(sessionID)
+		if err != nil {
+			log.Println("Error fetching traffic stats:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch traffic stats"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// Top Endpoints Endpoint
+	router.GET("/api/stats/top-endpoints", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		stats, err := database.GetTopEndpoints(sessionID)
+		if err != nil {
+			log.Println("Error fetching top endpoints:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch top endpoints"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// Top IPs Endpoint
+	router.GET("/api/stats/top-ips", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		stats, err := database.GetTopIPs(sessionID)
+		if err != nil {
+			log.Println("Error fetching top IPs:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch top IPs"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// Status Codes Breakdown Endpoint
+	router.GET("/api/stats/status-codes", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		stats, err := database.GetStatusCodesStats(sessionID)
+		if err != nil {
+			log.Println("Error fetching status codes stats:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch status codes stats"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// Browser Breakdown Endpoint
+	router.GET("/api/stats/browsers", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		stats, err := database.GetBrowsersStats(sessionID)
+		if err != nil {
+			log.Println("Error fetching browser stats:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch browser stats"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
+	// Error Logs with Pagination Endpoint
+	router.GET("/api/logs/errors", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		limitStr := c.DefaultQuery("limit", "10")
+		offsetStr := c.DefaultQuery("offset", "0")
+
+		limit, err := strconv.Atoi(limitStr)
+		if err != nil || limit <= 0 {
+			limit = 10
+		}
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil || offset < 0 {
+			offset = 0
+		}
+
+		logs, err := database.GetErrorLogs(sessionID, limit, offset)
+		if err != nil {
+			log.Println("Error fetching error logs:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch error logs"})
+			return
+		}
 		c.JSON(http.StatusOK, logs)
 	})
 

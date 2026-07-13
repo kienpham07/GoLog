@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/kienpham07/GoLog/backend/utils"
 )
 
@@ -36,7 +37,15 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
+		// 4.5 Store username in context for handlers to use
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if username, ok := claims["username"].(string); ok {
+				c.Set("username", username)
+			}
+		}
+
 		// 5. If everything is valid, pass the request to the actual endpoint
 		c.Next()
 	}
 }
+
