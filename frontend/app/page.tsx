@@ -109,15 +109,6 @@ function SearchIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-// Bell Icon
-function BellIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
-      <path d="M12 22a2.01 2.01 0 0 0 2-2h-4a2.01 2.01 0 0 0 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-    </svg>
-  );
-}
-
 // Chevron Down Icon
 function ChevronDownIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -130,21 +121,6 @@ function ChevronDownIcon(props: SVGProps<SVGSVGElement>) {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-function UnionJackFlag() {
-  return (
-    <span className="relative block h-7 w-9 overflow-hidden rounded-[4px] bg-[#012169] shadow-sm ring-1 ring-black/5">
-      <span className="absolute left-1/2 top-1/2 h-[44px] w-1.5 -translate-x-1/2 -translate-y-1/2 rotate-[55deg] bg-white" />
-      <span className="absolute left-1/2 top-1/2 h-[44px] w-1.5 -translate-x-1/2 -translate-y-1/2 -rotate-[55deg] bg-white" />
-      <span className="absolute left-1/2 top-1/2 h-[44px] w-0.5 -translate-x-1/2 -translate-y-1/2 rotate-[55deg] bg-[#c8102e]" />
-      <span className="absolute left-1/2 top-1/2 h-[44px] w-0.5 -translate-x-1/2 -translate-y-1/2 -rotate-[55deg] bg-[#c8102e]" />
-      <span className="absolute left-0 top-1/2 h-1.5 w-full -translate-y-1/2 bg-white" />
-      <span className="absolute left-1/2 top-0 h-full w-1.5 -translate-x-1/2 bg-white" />
-      <span className="absolute left-0 top-1/2 h-0.5 w-full -translate-y-1/2 bg-[#c8102e]" />
-      <span className="absolute left-1/2 top-0 h-full w-0.5 -translate-x-1/2 bg-[#c8102e]" />
-    </span>
   );
 }
 
@@ -169,313 +145,12 @@ function DashboardIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function ProductsIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M20 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function FavoritesIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78v0z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function InboxIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="m22 6-10 7L2 6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// Order Lists Icon
-function OrderListsIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M9 6h11M9 12h11M9 18h11M5 6v.01M5 12v.01M5 18v.01"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ProductStockIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function PricingIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <line
-        x1="7"
-        y1="7"
-        x2="7.01"
-        y2="7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function CalendarIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <rect
-        x="3"
-        y="4"
-        width="18"
-        height="18"
-        rx="2"
-        ry="2"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <line
-        x1="16"
-        y1="2"
-        x2="16"
-        y2="6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <line
-        x1="8"
-        y1="2"
-        x2="8"
-        y2="6"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <line
-        x1="3"
-        y1="10"
-        x2="21"
-        y2="10"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ToDoIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M9 11l3 3L22 4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function ContactIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle
-        cx="9"
-        cy="7"
-        r="4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function InvoiceIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <polyline
-        points="14 2 14 8 20 8"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function UIElementsIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TeamIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <path
-        d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle
-        cx="9"
-        cy="7"
-        r="4"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TableIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
-      <rect
-        x="3"
-        y="3"
-        width="18"
-        height="18"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-const SIDEBAR_ITEMS = [
-  { label: "Dashboard", icon: DashboardIcon, active: true },
-  { label: "Products", icon: ProductsIcon },
-  { label: "Favorites", icon: FavoritesIcon },
-  { label: "Inbox", icon: InboxIcon },
-  { label: "Order Lists", icon: OrderListsIcon },
-  { label: "Product Stock", icon: ProductStockIcon },
-];
-
-const PAGES_ITEMS = [
-  { label: "Pricing", icon: PricingIcon },
-  { label: "Calendar", icon: CalendarIcon },
-  { label: "To-Do", icon: ToDoIcon },
-  { label: "Contact", icon: ContactIcon },
-  { label: "Invoice", icon: InvoiceIcon },
-  { label: "UI Elements", icon: UIElementsIcon },
-  { label: "Team", icon: TeamIcon },
-  { label: "Table", icon: TableIcon },
-];
-
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  searchQuery: string;
-  onSearchChange: (value: string) => void;
-  username: string;
 }
 
-function Sidebar({ isOpen, onClose, searchQuery, onSearchChange, username }: SidebarProps) {
+function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
     <>
       {/* Mobile Backdrop */}
@@ -492,32 +167,15 @@ function Sidebar({ isOpen, onClose, searchQuery, onSearchChange, username }: Sid
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Narrow Icon Gutter */}
-        <div className="w-[72px] bg-cyber-dark flex flex-col items-center py-6 justify-between border-r border-cyber-border shrink-0">
-          <div className="flex flex-col items-center gap-6 w-full">
-            {/* Logo Icon */}
-            <div className="h-10 w-10 flex items-center justify-center rounded-lg bg-gradient-to-tr from-cyber-blue via-cyber-purple to-cyber-cyan text-white font-extrabold text-lg shadow-[0_0_15px_rgba(137,81,255,0.4)]">
-              G
-            </div>
-            
-            {/* Navigation Icons Gutter */}
-            <nav className="flex flex-col items-center gap-3 w-full px-2">
-              <button
-                type="button"
-                className="relative h-10 w-10 flex items-center justify-center rounded-lg bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.45)] transition"
-                title="Dashboard"
-              >
-                <DashboardIcon className="h-5 w-5" />
-              </button>
-            </nav>
-          </div>
-        </div>
-
-        {/* Wider Text Menu Sidebar */}
+        {/* Main Text Menu Sidebar */}
         <div className="w-[198px] bg-cyber-card flex flex-col justify-between py-6 px-4 border-r border-cyber-border">
           <div className="flex flex-col gap-6">
-            {/* Brand Title */}
-            <div className="flex items-center justify-center relative w-full">
+            {/* Brand Title with unified 'G' logo and 'GoLog' text */}
+            <div className="flex items-center gap-2.5 justify-center relative w-full -translate-x-3">
+              {/* Logo Icon */}
+              <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-gradient-to-tr from-cyber-blue via-cyber-purple to-cyber-cyan text-white font-extrabold text-sm shadow-[0_0_12px_rgba(137,81,255,0.35)] shrink-0">
+                G
+              </div>
               <span className="text-xl font-extrabold text-white tracking-wider">
                 GoLog
               </span>
@@ -533,19 +191,6 @@ function Sidebar({ isOpen, onClose, searchQuery, onSearchChange, username }: Sid
                 </svg>
               </button>
             </div>
-
-            {/* Search Input in Sidebar */}
-            <label className="relative block">
-              <span className="sr-only">Search...</span>
-              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
-              <input
-                type="search"
-                placeholder="Search for..."
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-                className="h-9 w-full rounded-lg bg-cyber-bg pl-9 pr-3 text-xs text-white outline-none border border-cyber-border transition placeholder:text-gray-500 focus:border-cyber-purple focus:ring-1 focus:ring-cyber-purple/35"
-              />
-            </label>
 
             {/* Navigation Lists */}
             <nav className="flex flex-col gap-1">
@@ -584,100 +229,105 @@ function TopNavigation({
 
   return (
     <header className="relative z-20 border-b border-cyber-border bg-cyber-bg/95 backdrop-blur shrink-0">
-      <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
-        <div className="flex shrink-0 items-center gap-4">
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            aria-label="Open navigation menu"
-            className="grid h-10 w-10 place-items-center rounded-full text-gray-400 transition hover:bg-cyber-card focus:outline-none lg:hidden"
-          >
-            <MenuIcon className="h-6 w-6" />
-          </button>
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
+        <div className="flex h-20 items-center justify-between gap-4">
+          <div className="flex items-center gap-4 flex-1">
+            {/* Mobile Trigger and Logo */}
+            <div className="flex shrink-0 items-center gap-4 lg:hidden">
+              <button
+                type="button"
+                onClick={onToggleSidebar}
+                aria-label="Open navigation menu"
+                className="grid h-10 w-10 place-items-center rounded-full text-gray-400 transition hover:bg-cyber-card focus:outline-none"
+              >
+                <MenuIcon className="h-6 w-6" />
+              </button>
 
-          {/* Mobile Logo */}
-          <div className="text-lg font-extrabold tracking-normal text-white lg:hidden">
-            <span className="text-cyber-purple">Go</span>Log
+              {/* Mobile Logo */}
+              <div className="text-lg font-extrabold tracking-normal text-white">
+                <span className="text-cyber-purple">Go</span>Log
+              </div>
+            </div>
+
+            {/* Top Search bar */}
+            <label className="relative hidden min-w-[260px] max-w-[430px] flex-1 md:block">
+              <span className="sr-only">Search logs</span>
+              <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
+              <input
+                type="search"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(event) => onSearchChange(event.target.value)}
+                className="h-11 w-full rounded-full border border-cyber-border bg-cyber-card pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-cyber-purple focus:ring-4 focus:ring-cyber-purple/15"
+              />
+            </label>
           </div>
-        </div>
 
-        {/* Top Search bar */}
-        <label className="relative hidden min-w-[260px] max-w-[430px] flex-1 md:block">
-          <span className="sr-only">Search logs</span>
-          <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
-          <input
-            type="search"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(event) => onSearchChange(event.target.value)}
-            className="h-11 w-full rounded-full border border-cyber-border bg-cyber-card pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-cyber-purple focus:ring-4 focus:ring-cyber-purple/15"
-          />
-        </label>
-
-        <div className="ml-auto flex items-center gap-2 sm:gap-4">
-          {/* Backdrop to close dropdown on click outside */}
-          {isDropdownOpen && (
-            <div
-              className="fixed inset-0 z-30 bg-transparent"
-              onClick={() => setIsDropdownOpen(false)}
-            />
-          )}
-
-          {/* Profile Dropdown Container */}
-          <div className="relative z-45">
-            <button
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex cursor-pointer items-center gap-3 rounded-full px-1 py-1 transition hover:bg-cyber-card focus:outline-none"
-              aria-label="Open profile menu"
-            >
-              <img
-                src="/user_avatar.png"
-                alt={username}
-                className="h-10 w-10 rounded-full object-cover shadow-sm ring-1 ring-cyber-purple/20"
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            {/* Backdrop to close dropdown on click outside */}
+            {isDropdownOpen && (
+              <div
+                className="fixed inset-0 z-30 bg-transparent"
+                onClick={() => setIsDropdownOpen(false)}
               />
-              <span className="hidden min-w-0 text-left lg:block">
-                <span className="block text-sm font-bold leading-5 text-white">
-                  {username}
+            )}
+
+            {/* Profile Dropdown Container */}
+            <div className="relative z-45">
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="flex cursor-pointer items-center gap-3 rounded-full px-1 py-1 transition hover:bg-cyber-card focus:outline-none"
+                aria-label="Open profile menu"
+              >
+                <img
+                  src="/user_avatar.png"
+                  alt={username}
+                  className="h-10 w-10 rounded-full object-cover shadow-sm ring-1 ring-cyber-purple/20"
+                />
+                <span className="hidden min-w-0 text-left lg:block">
+                  <span className="block text-sm font-bold leading-5 text-white">
+                    {username}
+                  </span>
+                  <span className="block text-[10px] font-semibold leading-4 text-gray-400">
+                    User
+                  </span>
                 </span>
-                <span className="block text-[10px] font-semibold leading-4 text-gray-400">
-                  Administrator
-                </span>
-              </span>
-              <ChevronDownIcon
-                className={`h-4 w-4 text-gray-500 transition-transform duration-350 ease-out ${
-                  isDropdownOpen ? "rotate-180 text-cyber-cyan" : ""
+                <ChevronDownIcon
+                  className={`h-4 w-4 text-gray-500 transition-transform duration-350 ease-out ${
+                    isDropdownOpen ? "rotate-180 text-cyber-cyan" : ""
+                  }`}
+                />
+              </button>
+
+              {/* Animated Dropdown Menu overlay */}
+              <div
+                className={`absolute right-0 mt-3 w-40 rounded-lg border border-cyber-border bg-cyber-card p-2 shadow-[0_12px_30px_rgba(0,0,0,0.6)] transition-all duration-300 ease-in-out origin-top-right ${
+                  isDropdownOpen
+                    ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
+                    : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
                 }`}
-              />
-            </button>
-
-            {/* Animated Dropdown Menu overlay */}
-            <div
-              className={`absolute right-0 mt-3 w-40 rounded-lg border border-cyber-border bg-cyber-card p-2 shadow-[0_12px_30px_rgba(0,0,0,0.6)] transition-all duration-300 ease-in-out origin-top-right ${
-                isDropdownOpen
-                  ? "opacity-100 scale-100 translate-y-0 pointer-events-auto"
-                  : "opacity-0 scale-95 -translate-y-2 pointer-events-none"
-              }`}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDropdownOpen(false);
-                  alert("Settings dashboard coming soon!");
-                }}
-                className="w-full rounded-md px-3 py-2 text-left text-xs font-bold text-gray-300 transition hover:bg-cyber-bg hover:text-cyber-cyan focus:outline-none"
               >
-                Settings
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDropdownOpen(false);
-                  onLogout();
-                }}
-                className="w-full rounded-md px-3 py-2 text-left text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition focus:outline-none mt-1 pt-2 border-t border-cyber-border/40"
-              >
-                Logout
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    alert("Settings dashboard coming soon!");
+                  }}
+                  className="w-full rounded-md px-3 py-2 text-left text-xs font-bold text-gray-300 transition hover:bg-cyber-bg hover:text-cyber-cyan focus:outline-none"
+                >
+                  Settings
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDropdownOpen(false);
+                    onLogout();
+                  }}
+                  className="w-full rounded-md px-3 py-2 text-left text-xs font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition focus:outline-none mt-1 pt-2 border-t border-cyber-border/40"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -971,9 +621,6 @@ export default function Home() {
       <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        username={username}
       />
 
       <div className="flex-1 flex flex-col min-w-0 bg-cyber-bg">
