@@ -188,7 +188,7 @@ function Sidebar({ isOpen, onClose, currentView, onViewChange }: SidebarProps) {
         <div className="w-[198px] bg-cyber-card flex flex-col justify-between py-6 px-4 border-r border-cyber-border">
           <div className="flex flex-col gap-6">
             {/* Brand Title with unified 'G' logo and 'GoLog' text */}
-            <div className="flex items-center gap-2.5 justify-center relative w-full">
+            <div className="flex items-center gap-2.5 justify-start pl-4 relative w-full">
               {/* Logo Icon */}
               <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-gradient-to-tr from-cyber-blue via-cyber-purple to-cyber-cyan text-white font-extrabold text-sm shadow-[0_0_12px_rgba(137,81,255,0.35)] shrink-0">
                 G
