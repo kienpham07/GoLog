@@ -19,6 +19,7 @@ import {
   Pie,
 } from "recharts";
 import { useRouter } from "next/navigation";
+import WorldMap from "./components/WorldMap";
 
 // Use an environment variable for the API URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -70,6 +71,14 @@ interface StatusCodeStat {
 
 interface BrowserStat {
   browser: string;
+  count: number;
+}
+
+interface GeoStat {
+  country: string;
+  country_code: string;
+  latitude: number;
+  longitude: number;
   count: number;
 }
 
@@ -160,11 +169,31 @@ function DashboardIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// Globe / Map Icon
+function GlobeIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
+      <path
+        d="M2 12h20"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 interface SidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  currentView: 'dashboard' | 'error-logs';
-  onViewChange: (view: 'dashboard' | 'error-logs') => void;
+  currentView: 'dashboard' | 'error-logs' | 'geographic-map';
+  onViewChange: (view: 'dashboard' | 'error-logs' | 'geographic-map') => void;
 }
 
 function Sidebar({ isOpen, onClose, currentView, onViewChange }: SidebarProps) {
@@ -243,6 +272,23 @@ function Sidebar({ isOpen, onClose, currentView, onViewChange }: SidebarProps) {
               >
                 <LogsIcon className="h-4 w-4 shrink-0" />
                 <span>Error Logs</span>
+              </button>
+
+              {/* Geographic Map view link */}
+              <button
+                type="button"
+                onClick={() => {
+                  onViewChange('geographic-map');
+                  onClose();
+                }}
+                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                  currentView === 'geographic-map'
+                    ? 'bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.4)]'
+                    : 'text-gray-400 hover:bg-cyber-bg hover:text-white'
+                }`}
+              >
+                <GlobeIcon className="h-4 w-4 shrink-0" />
+                <span>Geographic Map</span>
               </button>
             </nav>
           </div>
@@ -393,6 +439,31 @@ function TopNavigation({
   );
 }
 
+const countryCoords: Record<string, { x: number; y: number }> = {
+  US: { x: 180, y: 405 },
+  GB: { x: 403, y: 368 },
+  DE: { x: 432, y: 388 },
+  FR: { x: 412, y: 400 },
+  JP: { x: 724, y: 398 },
+  AU: { x: 714, y: 638 },
+  BR: { x: 310, y: 535 },
+  CA: { x: 180, y: 315 },
+  IN: { x: 610, y: 475 },
+  SG: { x: 641, y: 512 },
+  VN: { x: 658, y: 478 },
+  NL: { x: 417, y: 388 }
+};
+
+const getCoordinates = (stat: { country_code: string; latitude: number; longitude: number }) => {
+  const code = stat.country_code.toUpperCase();
+  if (countryCoords[code]) {
+    return countryCoords[code];
+  }
+  const x = 405 + 2.17799 * stat.longitude;
+  const y = 512 - 2.6 * stat.latitude;
+  return { x, y };
+};
+
 export default function Home() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -406,7 +477,7 @@ export default function Home() {
     return "User";
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'error-logs'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'error-logs' | 'geographic-map'>('dashboard');
   const [searchQuery, setSearchQuery] = useState(""); // top bar search
 
   // Aggregation States
@@ -418,6 +489,9 @@ export default function Home() {
   const [topIps, setTopIps] = useState<TopIP[]>([]);
   const [statusCodes, setStatusCodes] = useState<StatusCodeStat[]>([]);
   const [browsers, setBrowsers] = useState<BrowserStat[]>([]);
+  const [geographicStats, setGeographicStats] = useState<GeoStat[]>([]);
+  const [hoveredCountry, setHoveredCountry] = useState<GeoStat | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   
   // Paginated Error Logs
   const [errorLogs, setErrorLogs] = useState<LogEntry[]>([]);
@@ -497,6 +571,10 @@ export default function Home() {
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => (res.ok ? res.json() : []));
 
+    const geographicPromise = fetch(`${API_BASE_URL}/api/stats/geographic${sessionQuery}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((res) => (res.ok ? res.json() : []));
+
     Promise.all([
       overviewPromise,
       trafficPromise,
@@ -504,14 +582,16 @@ export default function Home() {
       topIpsPromise,
       statusCodesPromise,
       browsersPromise,
+      geographicPromise,
     ])
-      .then(([overviewData, trafficData, topEndpointsData, topIpsData, statusCodesData, browsersData]) => {
+      .then(([overviewData, trafficData, topEndpointsData, topIpsData, statusCodesData, browsersData, geographicData]) => {
         if (overviewData) setOverview(overviewData);
         setTraffic(trafficData);
         setTopPages(topEndpointsData);
         setTopIps(topIpsData);
         setStatusCodes(statusCodesData);
         setBrowsers(browsersData);
+        setGeographicStats(geographicData);
         setLoading(false);
       })
       .catch((err) => {
@@ -1118,7 +1198,7 @@ export default function Home() {
                 </div>
               </div>
             </>
-          ) : (
+          ) : currentView === 'error-logs' ? (
             <>
               {/* Log Management Heading */}
               <div className="mb-8">
@@ -1240,6 +1320,235 @@ export default function Home() {
                   >
                     Next
                   </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* Geographic Map Heading */}
+              <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="text-2xl font-extrabold text-white tracking-wide">
+                    Geographic Distribution
+                  </h1>
+                  <p className="text-xs text-gray-400 font-mono mt-1 uppercase tracking-wider text-[10px]">
+                    Interactive world visitor mapping
+                  </p>
+                </div>
+
+                {/* Session Filter Dropdown */}
+                <div className="relative">
+                  <select
+                    value={selectedSessionID !== null ? selectedSessionID : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSelectedSessionID(val ? Number(val) : null);
+                    }}
+                    className="appearance-none bg-cyber-card border border-cyber-border rounded-lg text-xs font-bold text-gray-300 pl-4 pr-10 py-2.5 outline-none cursor-pointer hover:border-cyber-purple/65 hover:text-white transition shadow-sm"
+                    aria-label="Filter by log upload session"
+                  >
+                    <option value="">All Upload Sessions</option>
+                    {sessions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.filename} ({formatCount(s.parsed_count)} lines)
+                      </option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
+                    <ChevronDownIcon className="h-3 w-3" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Map Layout Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+                {/* Heatmap Visualization Container */}
+                <div className="lg:col-span-2 bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col relative overflow-hidden min-h-[480px]">
+                  <h3 className="text-base font-bold text-white mb-1">Global Request Heatmap</h3>
+                  <p className="text-xs text-gray-400 font-mono mb-6">Real-time origin coordinates density</p>
+
+                  {loading ? (
+                    <div className="flex-1 flex flex-col items-center justify-center gap-2">
+                      <span className="h-6 w-6 animate-spin rounded-full border-2 border-cyber-purple border-t-transparent" />
+                      <span className="font-mono text-xs text-gray-500">Loading geolocations...</span>
+                    </div>
+                  ) : geographicStats.length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-gray-500 font-mono text-xs">
+                      No geographic data available
+                    </div>
+                  ) : (
+                    <div className="flex-1 w-full relative flex items-center justify-center">
+                      <WorldMap
+                        className="w-full h-auto text-gray-800 opacity-90"
+                        style={{ background: '#0D111A', borderRadius: '8px' }}
+                      >
+                        {/* Dynamic highlights for active traffic countries */}
+                        <style>{`
+                          #world-map path {
+                            fill: #151C28;
+                            stroke: #222C3D;
+                            stroke-width: 0.6;
+                            transition: fill 0.2s, stroke 0.2s;
+                          }
+                          #world-map path:hover {
+                            fill: #1E2738;
+                          }
+                          ${geographicStats.map(stat => `
+                            #world-map #${stat.country_code.toLowerCase()} {
+                              fill: #1F1F35;
+                              stroke: #8951FF;
+                              stroke-width: 1.0;
+                            }
+                            #world-map #${stat.country_code.toLowerCase()}:hover {
+                              fill: #272745;
+                            }
+                          `).join('\n')}
+                        `}</style>
+
+                        {/* Heatmap Dots */}
+                        {geographicStats.map((stat, i) => {
+                          const { x, y } = getCoordinates(stat);
+
+                          const maxCount = Math.max(...geographicStats.map(s => s.count));
+                          const ratio = stat.count / (maxCount || 1);
+                          let color = '#21C3FC';
+                          let glowColor = 'rgba(33, 195, 252, 0.4)';
+                          if (ratio > 0.6) {
+                            color = '#EF4444';
+                            glowColor = 'rgba(239, 68, 68, 0.4)';
+                          } else if (ratio > 0.2) {
+                            color = '#8951FF';
+                            glowColor = 'rgba(137, 81, 255, 0.4)';
+                          }
+
+                          const size = 6 + ratio * 10;
+
+                          return (
+                            <g
+                              key={i}
+                              className="cursor-pointer group"
+                              onMouseEnter={(e) => {
+                                setHoveredCountry(stat);
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                const parentRect = e.currentTarget.parentElement?.getBoundingClientRect();
+                                if (rect && parentRect) {
+                                  setTooltipPos({
+                                    x: rect.left - parentRect.left + rect.width / 2,
+                                    y: rect.top - parentRect.top - 10,
+                                  });
+                                }
+                              }}
+                              onMouseLeave={() => setHoveredCountry(null)}
+                            >
+                              <circle
+                                cx={x}
+                                cy={y}
+                                r={size + 8}
+                                fill={glowColor}
+                                className="animate-pulse"
+                              />
+                              <circle
+                                cx={x}
+                                cy={y}
+                                r={size}
+                                fill={color}
+                                className="stroke-white stroke-[1.5] transition-all group-hover:scale-125"
+                                style={{ transformOrigin: `${x}px ${y}px` }}
+                              />
+                            </g>
+                          );
+                        })}
+                      </WorldMap>
+
+                      {/* Tooltip Card */}
+                      {hoveredCountry && (
+                        <div
+                          className="absolute z-10 bg-cyber-card border border-cyber-border p-3 rounded-lg shadow-xl text-xs flex flex-col gap-1 pointer-events-none transition-opacity duration-200"
+                          style={{
+                            left: `${tooltipPos.x}px`,
+                            top: `${tooltipPos.y}px`,
+                            transform: 'translate(-50%, -100%)',
+                          }}
+                        >
+                          <div className="flex items-center gap-2 font-bold text-white">
+                            <span className="text-[14px] uppercase tracking-wider text-cyber-cyan">
+                              {hoveredCountry.country_code}
+                            </span>
+                            <span>{hoveredCountry.country}</span>
+                          </div>
+                          <div className="h-[1px] bg-cyber-border my-1" />
+                          <div className="flex justify-between gap-6 text-[10px] text-gray-400 font-mono">
+                            <span>Requests:</span>
+                            <span className="font-bold text-white">{formatCount(hoveredCountry.count)}</span>
+                          </div>
+                          <div className="flex justify-between gap-6 text-[10px] text-gray-400 font-mono">
+                            <span>Lat / Lon:</span>
+                            <span>{hoveredCountry.latitude.toFixed(2)}, {hoveredCountry.longitude.toFixed(2)}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Country Leaderboard Table */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col">
+                  <h3 className="text-base font-bold text-white mb-1">Country Leaderboard</h3>
+                  <p className="text-xs text-gray-400 font-mono mb-4">Traffic origins ranked by request volume</p>
+
+                  <div className="overflow-y-auto flex-1 max-h-[360px] custom-scrollbar">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                          <th className="pb-3 font-semibold w-12">Rank</th>
+                          <th className="pb-3 font-semibold">Origin</th>
+                          <th className="pb-3 font-semibold text-right">Traffic Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {loading ? (
+                          <tr>
+                            <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                              Loading data...
+                            </td>
+                          </tr>
+                        ) : geographicStats.length === 0 ? (
+                          <tr>
+                            <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                              No data available
+                            </td>
+                          </tr>
+                        ) : (
+                          [...geographicStats]
+                            .sort((a, b) => b.count - a.count)
+                            .map((item, index) => {
+                              const totalRequests = geographicStats.reduce((sum, s) => sum + s.count, 0);
+                              const percentage = ((item.count / (totalRequests || 1)) * 100).toFixed(1);
+                              return (
+                                <tr
+                                  key={index}
+                                  className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
+                                >
+                                  <td className="py-3 font-mono text-gray-400">{index + 1}</td>
+                                  <td className="py-3 font-mono text-gray-200">
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyber-bg border border-cyber-border text-cyber-cyan mr-2 font-mono">
+                                      {item.country_code}
+                                    </span>
+                                    <span>{item.country}</span>
+                                  </td>
+                                  <td className="py-3 font-mono text-right text-white">
+                                    <div className="flex flex-col items-end">
+                                      <span className="font-bold">{formatCount(item.count)}</span>
+                                      <span className="text-[9px] text-gray-400 font-normal">{percentage}%</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </>

@@ -385,6 +385,25 @@ func main() {
 		c.JSON(http.StatusOK, stats)
 	})
 
+	// Geographic Stats Endpoint
+	router.GET("/api/stats/geographic", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionIDStr := c.Query("session_id")
+		var sessionID *int
+		if sessionIDStr != "" {
+			if val, err := strconv.Atoi(sessionIDStr); err == nil {
+				sessionID = &val
+			}
+		}
+
+		stats, err := database.GetGeographicStats(sessionID)
+		if err != nil {
+			log.Println("Error fetching geographic stats:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch geographic stats"})
+			return
+		}
+		c.JSON(http.StatusOK, stats)
+	})
+
 	// Error Logs with Pagination Endpoint
 	router.GET("/api/logs/errors", middleware.AuthRequired(), func(c *gin.Context) {
 		sessionIDStr := c.Query("session_id")

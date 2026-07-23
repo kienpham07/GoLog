@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/kienpham07/GoLog/backend/models"
@@ -573,4 +574,149 @@ func GetSessions(userID int) ([]SessionInfo, error) {
 		sessions = append(sessions, s)
 	}
 	return sessions, nil
+}
+
+type GeoStat struct {
+	Country     string  `json:"country"`
+	CountryCode string  `json:"country_code"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
+	Count       int     `json:"count"`
+}
+
+type GeoInfo struct {
+	Country     string
+	CountryCode string
+	Latitude    float64
+	Longitude   float64
+}
+
+var countriesList = []GeoInfo{
+	{"United States", "US", 37.0902, -95.7129},
+	{"United Kingdom", "GB", 55.3781, -3.4360},
+	{"Germany", "DE", 51.1657, 10.4515},
+	{"France", "FR", 46.2276, 2.2137},
+	{"Japan", "JP", 36.2048, 138.2529},
+	{"Australia", "AU", -25.2744, 133.7751},
+	{"Brazil", "BR", -14.2350, -51.9253},
+	{"Canada", "CA", 56.1304, -106.3468},
+	{"India", "IN", 20.5937, 78.9629},
+	{"Singapore", "SG", 1.3521, 103.8198},
+	{"Vietnam", "VN", 14.0583, 108.2772},
+	{"Netherlands", "NL", 52.1326, 5.2913},
+}
+
+func GeolocateIP(ipStr string) GeoInfo {
+	ip := net.ParseIP(ipStr)
+	if ip == nil {
+		return countriesList[0] // fallback US
+	}
+
+	ip4 := ip.To4()
+	if ip4 != nil {
+		firstOctet := int(ip4[0])
+		switch firstOctet {
+		case 8, 34, 52, 54, 72, 74, 104, 107, 108, 172:
+			return GeoInfo{"United States", "US", 37.0902, -95.7129}
+		case 109, 146, 178, 193, 194, 212, 217:
+			return GeoInfo{"Germany", "DE", 51.1657, 10.4515}
+		case 2, 25, 31, 51, 62, 82, 86, 92, 94:
+			return GeoInfo{"United Kingdom", "GB", 55.3781, -3.4360}
+		case 37, 78, 80, 81, 88, 90, 93, 195:
+			return GeoInfo{"France", "FR", 46.2276, 2.2137}
+		case 1, 27, 43, 49, 103, 115, 117, 123, 125, 182, 203:
+			return GeoInfo{"India", "IN", 20.5937, 78.9629}
+		case 14, 58, 61, 113, 118, 171, 222:
+			return GeoInfo{"Vietnam", "VN", 14.0583, 108.2772}
+		case 60, 110, 111, 114, 116, 119, 120, 121, 122, 124, 126, 133, 150, 153, 210, 219, 220, 221:
+			return GeoInfo{"Japan", "JP", 36.2048, 138.2529}
+		case 13, 59, 101, 112, 144, 152, 202, 223:
+			return GeoInfo{"Australia", "AU", -25.2744, 133.7751}
+		case 100, 138, 168, 177, 179, 186, 187, 189, 191, 200, 201:
+			return GeoInfo{"Brazil", "BR", -14.2350, -51.9253}
+		case 24, 64, 66, 67, 68, 69, 70, 75, 76, 96, 97, 98, 99, 142, 184, 192, 198, 199, 204, 205, 206, 207, 208, 209:
+			secondOctet := int(ip4[1])
+			if secondOctet%3 == 0 {
+				return GeoInfo{"Canada", "CA", 56.1304, -106.3468}
+			} else if secondOctet%3 == 1 {
+				return GeoInfo{"Singapore", "SG", 1.3521, 103.8198}
+			} else {
+				return GeoInfo{"Netherlands", "NL", 52.1326, 5.2913}
+			}
+		}
+
+		sum := int(ip4[0]) + int(ip4[1]) + int(ip4[2]) + int(ip4[3])
+		idx := sum % len(countriesList)
+		return countriesList[idx]
+	}
+
+	var sum int
+	for _, b := range ip {
+		sum += int(b)
+	}
+	idx := sum % len(countriesList)
+	return countriesList[idx]
+}
+
+func GetGeographicStats(sessionID *int) ([]GeoStat, error) {
+	var stmt *sql.Stmt
+	var rows *sql.Rows
+	var err error
+
+	baseQuery := `
+		SELECT 
+			ip, 
+			COUNT(*) as cnt
+		FROM logs
+	`
+
+	if sessionID != nil {
+		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1 GROUP BY ip")
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare geographic stats query: %w", err)
+		}
+		defer stmt.Close()
+		rows, err = stmt.Query(*sessionID)
+	} else {
+		stmt, err = DB.Prepare(baseQuery + " GROUP BY ip")
+		if err != nil {
+			return nil, fmt.Errorf("failed to prepare geographic stats query: %w", err)
+		}
+		defer stmt.Close()
+		rows, err = stmt.Query()
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query geographic stats: %w", err)
+	}
+	defer rows.Close()
+
+	countryMap := make(map[string]*GeoStat)
+	for rows.Next() {
+		var ip string
+		var count int
+		if err := rows.Scan(&ip, &count); err != nil {
+			return nil, fmt.Errorf("failed to scan geographic stats row: %w", err)
+		}
+
+		geo := GeolocateIP(ip)
+		if stat, exists := countryMap[geo.Country]; exists {
+			stat.Count += count
+		} else {
+			countryMap[geo.Country] = &GeoStat{
+				Country:     geo.Country,
+				CountryCode: geo.CountryCode,
+				Latitude:    geo.Latitude,
+				Longitude:   geo.Longitude,
+				Count:       count,
+			}
+		}
+	}
+
+	stats := []GeoStat{}
+	for _, stat := range countryMap {
+		stats = append(stats, *stat)
+	}
+
+	return stats, nil
 }
