@@ -1,6 +1,6 @@
-import React, { SVGProps } from 'react';
+import React, { SVGProps, memo } from 'react';
 
-export default function WorldMap(props: SVGProps<SVGSVGElement>) {
+function WorldMap(props: SVGProps<SVGSVGElement>) {
   const { children, ...rest } = props;
   return (
     <svg
@@ -13,21 +13,8 @@ export default function WorldMap(props: SVGProps<SVGSVGElement>) {
       id="world-map"
       {...rest}
     >
-      <title>Simple World Map</title>
       <g>
-        <title>Simple World Map</title>
-<desc>
-    Author: Al MacDonald
-    Editor: Fritz Lekschas
-    License: CC BY-SA 3.0
-    ID: ISO 3166-1 or "_[a-zA-Z]" if an ISO code is not available
-</desc>
-<g>
-    <path id="_somaliland" d="M512.674,502.797l3.526,2.403l1.046-0.052l8.757-3.008l0.994,3.206l-0.701,2.706l-1.893,1.503l-4.729-0.302l-6.769-4.158L512.674,502.797L512.674,502.797z"/>
-    <path id="ae" d="M528.466,468.135l0.753,3.008l8.522,0.752l0.596-6.172l1.644-0.897l0.448-2.257l-2.688,0.753l-2.99,4.521L528.466,468.135L528.466,468.135z"/>
-    <path id="af" d="M545.85,435.383l1.374,10.771l3.423,0.752l0.32,1.937l-2.455,2.049l4.573,3.691l8.885-3.198l0.709-3.786l5.593-3.491l2.145-8.091l1.599-1.722l-1.659-2.887l5.412-3.347l-0.691-0.968l-2.498,0.155l-0.226,2.299l-3.354-0.033l-0.062-3.068l-1.079-1.288l-1.815,1.649l0.052,1.515l-2.739,1.036l-5.059-0.319l-6.568,6.881L545.85,435.383L545.85,435.383z"/>
-    <path id="al" d="M450.679,420.438v3.984l1.142,2.152l0.82-0.096l1.409-2.566l-0.821-1.15l-0.319-2.844l-1.089-1.012L450.679,420.438L450.679,420.438z"/>
-    <path id="am" d="M507.47,420.549l4.149,5.411l-1.218,1.427l-2.939-0.51l-3.646-3.268l0.196-2.146L507.47,420.549L507.47,420.549z"/>
+        <g>
     <g id="ao">
         <path className="mainland" d="M437.366,547.461l2.948,11.003l-0.069,3.478l-4.313,4.633l-0.647,7.527l16.597,0.147l5.395,1.954l4.45-0.58l-2.594-3.251l0.01-9.282l5.101-0.217v-3.621l-4.142-0.172l-0.829-8.575l-1.746,0.024l-0.943-0.848l-1.027,0.054l-1.365,2.646h-5.255l-1.22-1.227l0.363-1.738l-1.436-2.101L437.366,547.461L437.366,547.461z"/>
         <path d="M435.577,544.453l1.504,1.953l1.945-1.842l-0.571-1.909l-0.483-0.035L435.577,544.453L435.577,544.453z"/>
@@ -417,3 +404,5 @@ export default function WorldMap(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export default memo(WorldMap);

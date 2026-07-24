@@ -493,6 +493,103 @@ export default function Home() {
   const [hoveredCountry, setHoveredCountry] = useState<GeoStat | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   
+  // Paginated Country Leaderboard
+  const [geoLeaderboardPage, setGeoLeaderboardPage] = useState(0);
+  const geoLeaderboardLimit = 8;
+
+  const sortedGeoStats = useMemo(() => {
+    return [...geographicStats].sort((a, b) => b.count - a.count);
+  }, [geographicStats]);
+
+  const totalGeoLeaderboardPages = useMemo(() => {
+    return Math.max(1, Math.ceil(sortedGeoStats.length / geoLeaderboardLimit));
+  }, [sortedGeoStats.length, geoLeaderboardLimit]);
+
+  const paginatedGeoStats = useMemo(() => {
+    const start = geoLeaderboardPage * geoLeaderboardLimit;
+    return sortedGeoStats.slice(start, start + geoLeaderboardLimit);
+  }, [sortedGeoStats, geoLeaderboardPage, geoLeaderboardLimit]);
+
+  const dynamicMapStyles = useMemo(() => {
+    const maxCount = Math.max(...geographicStats.map(s => s.count), 1);
+    return `
+      #world-map path {
+        fill: #151C28;
+        stroke: #222C3D;
+        stroke-width: 0.6;
+        pointer-events: visiblePainted;
+        transition: fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease;
+        will-change: fill, stroke, stroke-width, filter;
+      }
+      #world-map path:hover {
+        fill: #1E2738;
+      }
+      ${geographicStats.map(stat => {
+        const code = stat.country_code.toLowerCase();
+        const ratio = stat.count / maxCount;
+
+        let strokeColor = "#21C3FC";
+        let fillColor = "rgba(33, 195, 252, 0.20)";
+        let hoverFillColor = "rgba(33, 195, 252, 0.38)";
+        let glowColor = "rgba(33, 195, 252, 0.6)";
+
+        if (ratio > 0.6) {
+          strokeColor = "#EF4444";
+          fillColor = "rgba(239, 68, 68, 0.25)";
+          hoverFillColor = "rgba(239, 68, 68, 0.45)";
+          glowColor = "rgba(239, 68, 68, 0.7)";
+        } else if (ratio > 0.2) {
+          strokeColor = "#8951FF";
+          fillColor = "rgba(137, 81, 255, 0.25)";
+          hoverFillColor = "rgba(137, 81, 255, 0.45)";
+          glowColor = "rgba(137, 81, 255, 0.7)";
+        }
+
+        return `
+          #world-map #${code}, #world-map #${code} path {
+            fill: ${fillColor} !important;
+            stroke: ${strokeColor} !important;
+            stroke-width: 1.25 !important;
+            cursor: pointer !important;
+            pointer-events: visiblePainted !important;
+            filter: drop-shadow(0 0 5px ${glowColor}) !important;
+            will-change: fill, stroke, stroke-width, filter !important;
+          }
+          #world-map #${code}:hover, #world-map #${code}:hover path {
+            fill: ${hoverFillColor} !important;
+            stroke-width: 1.8 !important;
+          }
+        `;
+      }).join('\n')}
+    `;
+  }, [geographicStats]);
+
+  const handleMapMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as SVGElement;
+    if (!target) return;
+    const countryId = (target.id || target.parentElement?.id || "").toLowerCase();
+    if (!countryId) {
+      setHoveredCountry(null);
+      return;
+    }
+    const found = geographicStats.find(s => s.country_code.toLowerCase() === countryId);
+    if (found) {
+      const parentRect = e.currentTarget.getBoundingClientRect();
+      if (parentRect) {
+        const x = Math.round(e.clientX - parentRect.left);
+        const y = Math.round(e.clientY - parentRect.top - 12);
+        setTooltipPos(prev => (prev.x === x && prev.y === y ? prev : { x, y }));
+        setHoveredCountry(prev => (prev?.country_code === found.country_code ? prev : found));
+      }
+    } else {
+      setHoveredCountry(null);
+    }
+  }, [geographicStats]);
+
+  const handleMapMouseLeave = useCallback(() => {
+    setHoveredCountry(null);
+  }, []);
+  
   // Paginated Error Logs
   const [errorLogs, setErrorLogs] = useState<LogEntry[]>([]);
   const [errorLogsPage, setErrorLogsPage] = useState(0);
@@ -592,6 +689,7 @@ export default function Home() {
         setStatusCodes(statusCodesData);
         setBrowsers(browsersData);
         setGeographicStats(geographicData);
+        setGeoLeaderboardPage(0);
         setLoading(false);
       })
       .catch((err) => {
@@ -757,7 +855,7 @@ export default function Home() {
           username={username}
         />
 
-        <main className="flex-1 px-4 py-8 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto">
+        <main className="flex-1 flex flex-col px-4 py-8 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto">
           {currentView === 'dashboard' ? (
             <>
               {/* Top Title & Actions Section */}
@@ -1324,9 +1422,9 @@ export default function Home() {
               </div>
             </>
           ) : (
-            <>
+            <div className="flex-1 flex flex-col min-h-0">
               {/* Geographic Map Heading */}
-              <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between shrink-0">
                 <div>
                   <h1 className="text-2xl font-extrabold text-white tracking-wide">
                     Geographic Distribution
@@ -1361,11 +1459,11 @@ export default function Home() {
               </div>
 
               {/* Map Layout Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 flex-1 min-h-0 mb-2">
                 {/* Heatmap Visualization Container */}
-                <div className="lg:col-span-2 bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col relative overflow-hidden min-h-[480px]">
-                  <h3 className="text-base font-bold text-white mb-1">Global Request Heatmap</h3>
-                  <p className="text-xs text-gray-400 font-mono mb-6">Real-time origin coordinates density</p>
+                <div className="lg:col-span-2 bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col relative overflow-hidden h-full min-h-[460px]">
+                  <h3 className="text-base font-bold text-white mb-1 shrink-0">Global Request Heatmap</h3>
+                  <p className="text-xs text-gray-400 font-mono mb-4 shrink-0">Real-time origin coordinates density</p>
 
                   {loading ? (
                     <div className="flex-1 flex flex-col items-center justify-center gap-2">
@@ -1377,93 +1475,23 @@ export default function Home() {
                       No geographic data available
                     </div>
                   ) : (
-                    <div className="flex-1 w-full relative flex items-center justify-center">
+                    <div
+                      className="flex-1 w-full relative flex items-center justify-center min-h-0"
+                      onMouseMove={handleMapMouseMove}
+                      onMouseLeave={handleMapMouseLeave}
+                    >
                       <WorldMap
-                        className="w-full h-auto text-gray-800 opacity-90"
+                        className="w-full h-full max-h-full object-contain text-gray-800 opacity-90"
                         style={{ background: '#0D111A', borderRadius: '8px' }}
                       >
-                        {/* Dynamic highlights for active traffic countries */}
-                        <style>{`
-                          #world-map path {
-                            fill: #151C28;
-                            stroke: #222C3D;
-                            stroke-width: 0.6;
-                            transition: fill 0.2s, stroke 0.2s;
-                          }
-                          #world-map path:hover {
-                            fill: #1E2738;
-                          }
-                          ${geographicStats.map(stat => `
-                            #world-map #${stat.country_code.toLowerCase()} {
-                              fill: #1F1F35;
-                              stroke: #8951FF;
-                              stroke-width: 1.0;
-                            }
-                            #world-map #${stat.country_code.toLowerCase()}:hover {
-                              fill: #272745;
-                            }
-                          `).join('\n')}
-                        `}</style>
-
-                        {/* Heatmap Dots */}
-                        {geographicStats.map((stat, i) => {
-                          const { x, y } = getCoordinates(stat);
-
-                          const maxCount = Math.max(...geographicStats.map(s => s.count));
-                          const ratio = stat.count / (maxCount || 1);
-                          let color = '#21C3FC';
-                          let glowColor = 'rgba(33, 195, 252, 0.4)';
-                          if (ratio > 0.6) {
-                            color = '#EF4444';
-                            glowColor = 'rgba(239, 68, 68, 0.4)';
-                          } else if (ratio > 0.2) {
-                            color = '#8951FF';
-                            glowColor = 'rgba(137, 81, 255, 0.4)';
-                          }
-
-                          const size = 6 + ratio * 10;
-
-                          return (
-                            <g
-                              key={i}
-                              className="cursor-pointer group"
-                              onMouseEnter={(e) => {
-                                setHoveredCountry(stat);
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                const parentRect = e.currentTarget.parentElement?.getBoundingClientRect();
-                                if (rect && parentRect) {
-                                  setTooltipPos({
-                                    x: rect.left - parentRect.left + rect.width / 2,
-                                    y: rect.top - parentRect.top - 10,
-                                  });
-                                }
-                              }}
-                              onMouseLeave={() => setHoveredCountry(null)}
-                            >
-                              <circle
-                                cx={x}
-                                cy={y}
-                                r={size + 8}
-                                fill={glowColor}
-                                className="animate-pulse"
-                              />
-                              <circle
-                                cx={x}
-                                cy={y}
-                                r={size}
-                                fill={color}
-                                className="stroke-white stroke-[1.5] transition-all group-hover:scale-125"
-                                style={{ transformOrigin: `${x}px ${y}px` }}
-                              />
-                            </g>
-                          );
-                        })}
+                        {/* Dynamic highlights for active traffic country borders & translucent fills */}
+                        <style>{dynamicMapStyles}</style>
                       </WorldMap>
 
                       {/* Tooltip Card */}
                       {hoveredCountry && (
                         <div
-                          className="absolute z-10 bg-cyber-card border border-cyber-border p-3 rounded-lg shadow-xl text-xs flex flex-col gap-1 pointer-events-none transition-opacity duration-200"
+                          className="absolute z-10 bg-cyber-card border border-cyber-border p-3 rounded-lg shadow-xl text-xs flex flex-col gap-1 pointer-events-none transition-all duration-75"
                           style={{
                             left: `${tooltipPos.x}px`,
                             top: `${tooltipPos.y}px`,
@@ -1471,17 +1499,17 @@ export default function Home() {
                           }}
                         >
                           <div className="flex items-center gap-2 font-bold text-white">
-                            <span className="text-[14px] uppercase tracking-wider text-cyber-cyan">
+                            <span className="text-[11px] font-extrabold px-1.5 py-0.5 rounded bg-cyber-bg border border-cyber-border text-cyber-cyan font-mono uppercase">
                               {hoveredCountry.country_code}
                             </span>
                             <span>{hoveredCountry.country}</span>
                           </div>
-                          <div className="h-[1px] bg-cyber-border my-1" />
-                          <div className="flex justify-between gap-6 text-[10px] text-gray-400 font-mono">
+                          <div className="h-[1px] bg-cyber-border/60 my-1" />
+                          <div className="flex justify-between gap-6 text-[11px] text-gray-400 font-mono">
                             <span>Requests:</span>
                             <span className="font-bold text-white">{formatCount(hoveredCountry.count)}</span>
                           </div>
-                          <div className="flex justify-between gap-6 text-[10px] text-gray-400 font-mono">
+                          <div className="flex justify-between gap-6 text-[11px] text-gray-400 font-mono">
                             <span>Lat / Lon:</span>
                             <span>{hoveredCountry.latitude.toFixed(2)}, {hoveredCountry.longitude.toFixed(2)}</span>
                           </div>
@@ -1492,51 +1520,51 @@ export default function Home() {
                 </div>
 
                 {/* Country Leaderboard Table */}
-                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col">
-                  <h3 className="text-base font-bold text-white mb-1">Country Leaderboard</h3>
-                  <p className="text-xs text-gray-400 font-mono mb-4">Traffic origins ranked by request volume</p>
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between h-full min-h-[460px]">
+                  <div className="flex flex-col flex-1 min-h-0">
+                    <h3 className="text-base font-bold text-white mb-1 shrink-0">Country Leaderboard</h3>
+                    <p className="text-xs text-gray-400 font-mono mb-4 shrink-0">Traffic origins ranked by request volume</p>
 
-                  <div className="overflow-y-auto flex-1 max-h-[360px] custom-scrollbar">
-                    <table className="w-full text-left border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b border-cyber-border text-gray-400 font-mono">
-                          <th className="pb-3 font-semibold w-12">Rank</th>
-                          <th className="pb-3 font-semibold">Origin</th>
-                          <th className="pb-3 font-semibold text-right">Traffic Share</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {loading ? (
-                          <tr>
-                            <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
-                              Loading data...
-                            </td>
+                    <div className="overflow-x-auto flex-1 flex flex-col min-h-0">
+                      <table className="w-full h-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-cyber-border text-gray-400 font-mono shrink-0">
+                            <th className="pb-3 font-semibold w-12">Rank</th>
+                            <th className="pb-3 font-semibold">Origin</th>
+                            <th className="pb-3 font-semibold text-right">Traffic Share</th>
                           </tr>
-                        ) : geographicStats.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
-                              No data available
-                            </td>
-                          </tr>
-                        ) : (
-                          [...geographicStats]
-                            .sort((a, b) => b.count - a.count)
-                            .map((item, index) => {
+                        </thead>
+                        <tbody className="divide-y divide-cyber-border/30">
+                          {loading ? (
+                            <tr>
+                              <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                                Loading data...
+                              </td>
+                            </tr>
+                          ) : paginatedGeoStats.length === 0 ? (
+                            <tr>
+                              <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
+                                No data available
+                              </td>
+                            </tr>
+                          ) : (
+                            paginatedGeoStats.map((item, index) => {
+                              const globalRank = geoLeaderboardPage * geoLeaderboardLimit + index + 1;
                               const totalRequests = geographicStats.reduce((sum, s) => sum + s.count, 0);
                               const percentage = ((item.count / (totalRequests || 1)) * 100).toFixed(1);
                               return (
                                 <tr
-                                  key={index}
-                                  className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
+                                  key={item.country_code || index}
+                                  className="hover:bg-cyber-bg/30 transition-colors"
                                 >
-                                  <td className="py-3 font-mono text-gray-400">{index + 1}</td>
-                                  <td className="py-3 font-mono text-gray-200">
+                                  <td className="py-2.5 font-mono text-gray-400">{globalRank}</td>
+                                  <td className="py-2.5 font-mono text-gray-200">
                                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyber-bg border border-cyber-border text-cyber-cyan mr-2 font-mono">
                                       {item.country_code}
                                     </span>
                                     <span>{item.country}</span>
                                   </td>
-                                  <td className="py-3 font-mono text-right text-white">
+                                  <td className="py-2.5 font-mono text-right text-white">
                                     <div className="flex flex-col items-end">
                                       <span className="font-bold">{formatCount(item.count)}</span>
                                       <span className="text-[9px] text-gray-400 font-normal">{percentage}%</span>
@@ -1545,13 +1573,37 @@ export default function Home() {
                                 </tr>
                               );
                             })
-                        )}
-                      </tbody>
-                    </table>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Leaderboard Pagination Controls */}
+                  <div className="flex justify-between items-center mt-6 border-t border-cyber-border/40 pt-4 shrink-0">
+                    <button
+                      type="button"
+                      disabled={geoLeaderboardPage === 0 || loading || geographicStats.length === 0}
+                      onClick={() => setGeoLeaderboardPage((p) => Math.max(0, p - 1))}
+                      className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Previous
+                    </button>
+                    <span className="text-[12px] text-gray-400 font-mono">
+                      Page {geographicStats.length === 0 ? 0 : geoLeaderboardPage + 1} of {totalGeoLeaderboardPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={geoLeaderboardPage >= totalGeoLeaderboardPages - 1 || loading || geographicStats.length === 0}
+                      onClick={() => setGeoLeaderboardPage((p) => p + 1)}
+                      className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Next
+                    </button>
                   </div>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </main>
       </div>
