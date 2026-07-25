@@ -825,9 +825,28 @@ export default function Home() {
   const formatHour = (tick: any) => {
     try {
       const d = new Date(tick);
-      return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }) + " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
     } catch {
       return String(tick);
+    }
+  };
+
+  const formatUTCTimestamp = (timestamp: string) => {
+    try {
+      const d = new Date(timestamp);
+      if (isNaN(d.getTime())) return timestamp;
+      return d.toLocaleString("en-US", {
+        timeZone: "UTC",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }) + " UTC";
+    } catch {
+      return timestamp;
     }
   };
 
@@ -1376,7 +1395,7 @@ export default function Home() {
                         filteredErrorLogs.map((log) => (
                           <tr key={log.id} className="hover:bg-cyber-bg/30 transition-colors">
                             <td className="py-3 font-mono text-gray-400">
-                              {new Date(log.timestamp).toLocaleString()}
+                              {formatUTCTimestamp(log.timestamp)}
                             </td>
                             <td className="py-3 font-mono text-cyber-cyan">{log.ip}</td>
                             <td className="py-3 font-mono text-gray-200 truncate max-w-[200px]" title={log.endpoint}>

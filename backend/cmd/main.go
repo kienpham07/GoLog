@@ -203,17 +203,18 @@ func main() {
 		// Calculate date range from parsed logs
 		dateRange := "N/A"
 		if len(parsedLogs) > 0 {
-			minTime := parsedLogs[0].Timestamp
-			maxTime := parsedLogs[0].Timestamp
+			minTime := parsedLogs[0].Timestamp.UTC()
+			maxTime := parsedLogs[0].Timestamp.UTC()
 			for _, entry := range parsedLogs {
-				if entry.Timestamp.Before(minTime) {
-					minTime = entry.Timestamp
+				t := entry.Timestamp.UTC()
+				if t.Before(minTime) {
+					minTime = t
 				}
-				if entry.Timestamp.After(maxTime) {
-					maxTime = entry.Timestamp
+				if t.After(maxTime) {
+					maxTime = t
 				}
 			}
-			dateRange = minTime.Format("02/Jan/2006 15:04:05") + " - " + maxTime.Format("02/Jan/2006 15:04:05")
+			dateRange = minTime.Format("02/Jan/2006 15:04:05 UTC") + " - " + maxTime.Format("02/Jan/2006 15:04:05 UTC")
 		}
 
 		// Return success response

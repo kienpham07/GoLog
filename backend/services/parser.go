@@ -44,6 +44,7 @@ func ParseLogFile(filePath string) ([]models.LogEntry, int, error) {
 				skippedCount++
 				continue
 			}
+			timestamp = timestamp.UTC()
 
 			// Convert status code from string to integer
 			status, err := strconv.Atoi(matches[6])

@@ -168,7 +168,7 @@ func GetLogs(sessionID *int) ([]models.LogEntry, error) {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
 		if ts.Valid {
-			entry.Timestamp = ts.Time
+			entry.Timestamp = ts.Time.UTC()
 		}
 		logs = append(logs, entry)
 	}
@@ -272,7 +272,7 @@ func GetTrafficStats(sessionID *int) ([]TrafficStat, error) {
 		if err := rows.Scan(&hr, &count); err != nil {
 			return nil, fmt.Errorf("failed to scan traffic row: %w", err)
 		}
-		stat.Hour = hr.Format(time.RFC3339)
+		stat.Hour = hr.UTC().Format(time.RFC3339)
 		stat.Count = count
 		stats = append(stats, stat)
 	}
@@ -554,7 +554,7 @@ func GetErrorLogs(sessionID *int, limit, offset int) ([]models.LogEntry, error) 
 			return nil, fmt.Errorf("failed to scan error log row: %w", err)
 		}
 		if ts.Valid {
-			entry.Timestamp = ts.Time
+			entry.Timestamp = ts.Time.UTC()
 		}
 		logs = append(logs, entry)
 	}
