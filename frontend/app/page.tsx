@@ -1232,7 +1232,7 @@ export default function Home() {
                                       : "bg-emerald-500/15 text-emerald-400 border-emerald-500/25"
                                   }`}
                                 >
-                                  {item.suspicious ? "Suspicious" : "Clean"}
+                                  {item.suspicious ? "Suspicious" : "Normal"}
                                 </span>
                               </td>
                             </tr>

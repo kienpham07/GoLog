@@ -323,32 +323,76 @@ func GetTopEndpoints(sessionID *int) ([]TopEndpoint, error) {
 
 // GetTopIPs returns top client IPs and flags suspicious ones
 func GetTopIPs(sessionID *int) ([]TopIP, error) {
-	var stmt *sql.Stmt
 	var rows *sql.Rows
 	var err error
 
-	baseQuery := `
+	queryWithSession := `
+		WITH ip_counts AS (
+			SELECT 
+				ip, 
+				COUNT(*) as cnt,
+				SUM(CASE 
+					WHEN LOWER(endpoint) LIKE '%/.env%' 
+					  OR LOWER(endpoint) LIKE '%.env%'
+					  OR LOWER(endpoint) LIKE '%/wp-admin%'
+					  OR LOWER(endpoint) LIKE '%/wp-login.php%'
+					  OR LOWER(endpoint) LIKE '%/phpmyadmin%'
+					  OR LOWER(endpoint) LIKE '%/.git%'
+					  OR LOWER(endpoint) LIKE '%/config%'
+					THEN 1 ELSE 0 
+				END) as sensitive_cnt,
+				SUM(CASE WHEN status = 401 THEN 1 ELSE 0 END) as auth_fail_cnt
+			FROM logs
+			WHERE session_id = $1
+			GROUP BY ip
+		),
+		stats AS (
+			SELECT COALESCE(AVG(cnt), 0) as avg_cnt FROM ip_counts
+		)
 		SELECT 
-			ip, 
-			COUNT(*) as cnt,
-			(COUNT(*) > 200 OR SUM(CASE WHEN endpoint = '/.env' OR endpoint = '/wp-admin' OR endpoint = '/phpmyadmin' OR endpoint LIKE '%/.env%' OR endpoint LIKE '%/wp-admin%' OR endpoint LIKE '%/phpmyadmin%' THEN 1 ELSE 0 END) > 0) as suspicious
-		FROM logs
+			i.ip, 
+			i.cnt,
+			(i.sensitive_cnt > 0 OR i.auth_fail_cnt > 10 OR i.cnt > 600 OR (i.cnt >= (SELECT avg_cnt * 2.0 FROM stats) AND i.cnt >= 50)) as suspicious
+		FROM ip_counts i
+		ORDER BY i.cnt DESC
+		LIMIT 10
+	`
+
+	queryAll := `
+		WITH ip_counts AS (
+			SELECT 
+				ip, 
+				COUNT(*) as cnt,
+				SUM(CASE 
+					WHEN LOWER(endpoint) LIKE '%/.env%' 
+					  OR LOWER(endpoint) LIKE '%.env%'
+					  OR LOWER(endpoint) LIKE '%/wp-admin%'
+					  OR LOWER(endpoint) LIKE '%/wp-login.php%'
+					  OR LOWER(endpoint) LIKE '%/phpmyadmin%'
+					  OR LOWER(endpoint) LIKE '%/.git%'
+					  OR LOWER(endpoint) LIKE '%/config%'
+					THEN 1 ELSE 0 
+				END) as sensitive_cnt,
+				SUM(CASE WHEN status = 401 THEN 1 ELSE 0 END) as auth_fail_cnt
+			FROM logs
+			GROUP BY ip
+		),
+		stats AS (
+			SELECT COALESCE(AVG(cnt), 0) as avg_cnt FROM ip_counts
+		)
+		SELECT 
+			i.ip, 
+			i.cnt,
+			(i.sensitive_cnt > 0 OR i.auth_fail_cnt > 10 OR i.cnt > 600 OR (i.cnt >= (SELECT avg_cnt * 2.0 FROM stats) AND i.cnt >= 50)) as suspicious
+		FROM ip_counts i
+		ORDER BY i.cnt DESC
+		LIMIT 10
 	`
 
 	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1 GROUP BY ip ORDER BY cnt DESC LIMIT 10")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare top IPs query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID)
+		rows, err = DB.Query(queryWithSession, *sessionID)
 	} else {
-		stmt, err = DB.Prepare(baseQuery + " GROUP BY ip ORDER BY cnt DESC LIMIT 10")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare top IPs query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query()
+		rows, err = DB.Query(queryAll)
 	}
 
 	if err != nil {
