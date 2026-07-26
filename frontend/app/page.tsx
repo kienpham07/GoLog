@@ -1291,6 +1291,7 @@ export default function Home() {
                             className="font-mono"
                           />
                           <Tooltip
+                            cursor={{ fill: "rgba(255, 255, 255, 0.05)" }}
                             contentStyle={{
                               backgroundColor: "#121620",
                               borderColor: "#1E2530",
