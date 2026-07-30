@@ -492,7 +492,34 @@ export default function Home() {
   const [geographicStats, setGeographicStats] = useState<GeoStat[]>([]);
   const [hoveredCountry, setHoveredCountry] = useState<GeoStat | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  
+
+  // Time Range Filter State
+  const [timeRangePreset, setTimeRangePreset] = useState<'all' | '24h' | '7d' | 'custom'>('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
+  const getDateQuery = useCallback(() => {
+    if (timeRangePreset === '24h') {
+      const start = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      return `&start_date=${encodeURIComponent(start)}`;
+    }
+    if (timeRangePreset === '7d') {
+      const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      return `&start_date=${encodeURIComponent(start)}`;
+    }
+    if (timeRangePreset === 'custom') {
+      let q = "";
+      if (customStartDate) {
+        q += `&start_date=${encodeURIComponent(customStartDate)}`;
+      }
+      if (customEndDate) {
+        q += `&end_date=${encodeURIComponent(customEndDate)}`;
+      }
+      return q;
+    }
+    return "";
+  }, [timeRangePreset, customStartDate, customEndDate]);
+
   // Paginated Country Leaderboard
   const [geoLeaderboardPage, setGeoLeaderboardPage] = useState(0);
   const geoLeaderboardLimit = 8;
@@ -634,9 +661,12 @@ export default function Home() {
     }
 
     setLoading(true);
-    const sessionQuery = selectedSessionID !== null ? `?session_id=${selectedSessionID}` : "";
+    const sessionParam = selectedSessionID !== null ? `session_id=${selectedSessionID}` : "";
+    const dateParam = getDateQuery();
+    const combinedParams = [sessionParam, dateParam.replace(/^&/, "")].filter(Boolean).join("&");
+    const queryStr = combinedParams ? `?${combinedParams}` : "";
 
-    const overviewPromise = fetch(`${API_BASE_URL}/api/stats/overview${sessionQuery}`, {
+    const overviewPromise = fetch(`${API_BASE_URL}/api/stats/overview${queryStr}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => {
@@ -648,27 +678,27 @@ export default function Home() {
         return res.ok ? res.json() : null;
       });
 
-    const trafficPromise = fetch(`${API_BASE_URL}/api/stats/traffic${sessionQuery}`, {
+    const trafficPromise = fetch(`${API_BASE_URL}/api/stats/traffic${queryStr}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => (res.ok ? res.json() : []));
 
-    const topEndpointsPromise = fetch(`${API_BASE_URL}/api/stats/top-endpoints${sessionQuery}`, {
+    const topEndpointsPromise = fetch(`${API_BASE_URL}/api/stats/top-endpoints${queryStr}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => (res.ok ? res.json() : []));
 
-    const topIpsPromise = fetch(`${API_BASE_URL}/api/stats/top-ips${sessionQuery}`, {
+    const topIpsPromise = fetch(`${API_BASE_URL}/api/stats/top-ips${queryStr}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => (res.ok ? res.json() : []));
 
-    const statusCodesPromise = fetch(`${API_BASE_URL}/api/stats/status-codes${sessionQuery}`, {
+    const statusCodesPromise = fetch(`${API_BASE_URL}/api/stats/status-codes${queryStr}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => (res.ok ? res.json() : []));
 
-    const browsersPromise = fetch(`${API_BASE_URL}/api/stats/browsers${sessionQuery}`, {
+    const browsersPromise = fetch(`${API_BASE_URL}/api/stats/browsers${queryStr}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => (res.ok ? res.json() : []));
 
-    const geographicPromise = fetch(`${API_BASE_URL}/api/stats/geographic${sessionQuery}`, {
+    const geographicPromise = fetch(`${API_BASE_URL}/api/stats/geographic${queryStr}`, {
       headers: { Authorization: `Bearer ${token}` },
     }).then((res) => (res.ok ? res.json() : []));
 
@@ -696,23 +726,26 @@ export default function Home() {
         console.error("Failed to load dashboard data:", err);
         setLoading(false);
       });
-  }, [selectedSessionID, router]);
+  }, [selectedSessionID, getDateQuery, router]);
 
   // Fetch Error Logs
   const fetchErrorLogsData = useCallback(() => {
     const token = localStorage.getItem("golog_token");
     if (!token) return;
 
-    const sessionQuery = selectedSessionID !== null ? `&session_id=${selectedSessionID}` : "";
+    const sessionParam = selectedSessionID !== null ? `session_id=${selectedSessionID}` : "";
+    const dateParam = getDateQuery();
+    const combinedParams = [sessionParam, dateParam.replace(/^&/, "")].filter(Boolean).join("&");
+    const extraQuery = combinedParams ? `&${combinedParams}` : "";
     const offset = errorLogsPage * errorLogsLimit;
 
-    fetch(`${API_BASE_URL}/api/logs/errors?limit=${errorLogsLimit}&offset=${offset}${sessionQuery}`, {
+    fetch(`${API_BASE_URL}/api/logs/errors?limit=${errorLogsLimit}&offset=${offset}${extraQuery}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setErrorLogs(data))
       .catch((err) => console.error("Error fetching error logs:", err));
-  }, [selectedSessionID, errorLogsPage, errorLogsLimit]);
+  }, [selectedSessionID, getDateQuery, errorLogsPage, errorLogsLimit]);
 
   // Trigger data loading
   useEffect(() => {
@@ -890,6 +923,62 @@ export default function Home() {
 
                 {/* Actions: Session Select, Hidden File Input, Upload Button */}
                 <div className="flex flex-wrap items-center gap-3">
+                  {/* Time Range Filter Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={timeRangePreset}
+                      onChange={(e) => {
+                        const val = e.target.value as 'all' | '24h' | '7d' | 'custom';
+                        setTimeRangePreset(val);
+                      }}
+                      className="appearance-none bg-cyber-card border border-cyber-border rounded-lg text-xs font-bold text-gray-300 pl-4 pr-10 py-2.5 outline-none cursor-pointer hover:border-cyber-purple/65 hover:text-white transition shadow-sm"
+                      aria-label="Filter by time range"
+                    >
+                      <option value="all">📅 All Time</option>
+                      <option value="24h">⏱️ Last 24 Hours</option>
+                      <option value="7d">📆 Last 7 Days</option>
+                      <option value="custom">⚙️ Custom Range</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-gray-500">
+                      <ChevronDownIcon className="h-3 w-3" />
+                    </div>
+                  </div>
+
+                  {timeRangePreset === 'custom' && (
+                    <div className="flex items-center gap-2 bg-cyber-card border border-cyber-border rounded-lg px-3 py-1.5 text-xs text-gray-300 shadow-sm">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-gray-400 font-mono">From:</span>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="bg-cyber-bg border border-cyber-border/80 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyber-purple font-mono cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-gray-400 font-mono">To:</span>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="bg-cyber-bg border border-cyber-border/80 rounded px-2 py-1 text-xs text-white outline-none focus:border-cyber-purple font-mono cursor-pointer"
+                        />
+                      </div>
+                      {(customStartDate || customEndDate) && (
+                        <button
+                          onClick={() => {
+                            setCustomStartDate("");
+                            setCustomEndDate("");
+                          }}
+                          className="text-gray-400 hover:text-rose-400 text-xs font-bold px-1 transition"
+                          title="Clear Custom Dates"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* Session Filter Dropdown */}
                   <div className="relative">
                     <select
@@ -1073,7 +1162,7 @@ export default function Home() {
                       {mounted && !loading ? (
                         traffic.length === 0 ? (
                           <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
-                            No traffic data available
+                            No data available for this date range
                           </div>
                         ) : (
                           <ResponsiveContainer width="100%" height="100%">
@@ -1117,7 +1206,7 @@ export default function Home() {
                     <div className="h-60 flex items-center justify-center">
                       {mounted && !loading ? (
                         statusCodes.length === 0 ? (
-                          <div className="text-gray-500 font-mono text-xs">No data available</div>
+                          <div className="text-gray-500 font-mono text-xs">No data available for this date range</div>
                         ) : (
                           <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -1180,8 +1269,8 @@ export default function Home() {
                           </tr>
                         ) : topPages.length === 0 ? (
                           <tr>
-                            <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
-                              No page logs found
+                            <td colSpan={3} className="py-6 text-center text-gray-500 font-mono text-xs">
+                              No data available for this date range
                             </td>
                           </tr>
                         ) : (
@@ -1228,8 +1317,8 @@ export default function Home() {
                           </tr>
                         ) : topIps.length === 0 ? (
                           <tr>
-                            <td colSpan={4} className="py-4 text-center text-gray-500 font-mono">
-                              No IP logs found
+                            <td colSpan={4} className="py-6 text-center text-gray-500 font-mono text-xs">
+                              No data available for this date range
                             </td>
                           </tr>
                         ) : (
@@ -1271,7 +1360,7 @@ export default function Home() {
                   {mounted && !loading ? (
                     browsers.length === 0 ? (
                       <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
-                        No browser data available
+                        No data available for this date range
                       </div>
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
@@ -1388,9 +1477,9 @@ export default function Home() {
                         </tr>
                       ) : filteredErrorLogs.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-gray-500 font-mono">
-                            No error logs match this view.
-                          </td>
+                            <td colSpan={6} className="py-8 text-center text-gray-500 font-mono text-xs">
+                              No data available for this date range
+                            </td>
                         </tr>
                       ) : (
                         filteredErrorLogs.map((log) => (
@@ -1418,26 +1507,32 @@ export default function Home() {
                 </div>
 
                 {/* Pagination Controls */}
-                <div className="flex justify-between items-center mt-6 border-t border-cyber-border/40 pt-4">
-                  <button
-                    type="button"
-                    disabled={errorLogsPage === 0}
-                    onClick={() => setErrorLogsPage((p) => p - 1)}
-                    className="px-4 py-2 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
-                  >
-                    Previous
-                  </button>
-                  <span className="text-[13px] text-gray-400 font-mono">
-                    Page {errorLogsPage + 1}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={errorLogs.length < errorLogsLimit}
-                    onClick={() => setErrorLogsPage((p) => p + 1)}
-                    className="px-4 py-2 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
-                  >
-                    Next
-                  </button>
+                <div className="grid grid-cols-3 items-center w-full mt-6 border-t border-cyber-border/40 pt-4">
+                  <div className="flex justify-start">
+                    <button
+                      type="button"
+                      disabled={errorLogsPage === 0}
+                      onClick={() => setErrorLogsPage((p) => p - 1)}
+                      className="px-4 py-2 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
+                    >
+                      Previous
+                    </button>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-[13px] text-gray-400 font-mono">
+                      Page {errorLogsPage + 1}
+                    </span>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={errorLogs.length < errorLogsLimit}
+                      onClick={() => setErrorLogsPage((p) => p + 1)}
+                      className="px-4 py-2 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-50 transition"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
@@ -1492,7 +1587,7 @@ export default function Home() {
                     </div>
                   ) : geographicStats.length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center text-gray-500 font-mono text-xs">
-                      No geographic data available
+                      No data available for this date range
                     </div>
                   ) : (
                     <div
@@ -1562,11 +1657,11 @@ export default function Home() {
                               </td>
                             </tr>
                           ) : paginatedGeoStats.length === 0 ? (
-                            <tr>
-                              <td colSpan={3} className="py-4 text-center text-gray-500 font-mono">
-                                No data available
-                              </td>
-                            </tr>
+                              <tr>
+                                <td colSpan={3} className="py-8 text-center text-gray-500 font-mono text-xs">
+                                  No data available for this date range
+                                </td>
+                              </tr>
                           ) : (
                             paginatedGeoStats.map((item, index) => {
                               const globalRank = geoLeaderboardPage * geoLeaderboardLimit + index + 1;
@@ -1600,26 +1695,32 @@ export default function Home() {
                   </div>
 
                   {/* Leaderboard Pagination Controls */}
-                  <div className="flex justify-between items-center mt-6 border-t border-cyber-border/40 pt-4 shrink-0">
-                    <button
-                      type="button"
-                      disabled={geoLeaderboardPage === 0 || loading || geographicStats.length === 0}
-                      onClick={() => setGeoLeaderboardPage((p) => Math.max(0, p - 1))}
-                      className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-[12px] text-gray-400 font-mono">
-                      Page {geographicStats.length === 0 ? 0 : geoLeaderboardPage + 1} of {totalGeoLeaderboardPages}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={geoLeaderboardPage >= totalGeoLeaderboardPages - 1 || loading || geographicStats.length === 0}
-                      onClick={() => setGeoLeaderboardPage((p) => p + 1)}
-                      className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-                    >
-                      Next
-                    </button>
+                  <div className="grid grid-cols-3 items-center w-full mt-6 border-t border-cyber-border/40 pt-4 shrink-0">
+                    <div className="flex justify-start">
+                      <button
+                        type="button"
+                        disabled={geoLeaderboardPage === 0 || loading || geographicStats.length === 0}
+                        onClick={() => setGeoLeaderboardPage((p) => Math.max(0, p - 1))}
+                        className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >
+                        Previous
+                      </button>
+                    </div>
+                    <div className="text-center">
+                      <span className="text-[12px] text-gray-400 font-mono">
+                        Page {geographicStats.length === 0 ? 0 : geoLeaderboardPage + 1} of {totalGeoLeaderboardPages}
+                      </span>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        disabled={geoLeaderboardPage >= totalGeoLeaderboardPages - 1 || loading || geographicStats.length === 0}
+                        onClick={() => setGeoLeaderboardPage((p) => p + 1)}
+                        className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-[12px] font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -228,8 +229,8 @@ func main() {
 		})
 	})
 
-	// Get Logs Endpoint
-	router.GET("/api/logs", middleware.AuthRequired(), func(c *gin.Context) {
+	// Helper to parse query parameters (session_id, start_date, end_date)
+	parseQueryParams := func(c *gin.Context) (*int, *time.Time, *time.Time) {
 		sessionIDStr := c.Query("session_id")
 		var sessionID *int
 		if sessionIDStr != "" {
@@ -238,7 +239,38 @@ func main() {
 			}
 		}
 
-		logs, err := database.GetLogs(sessionID)
+		var startDate *time.Time
+		startStr := c.Query("start_date")
+		if startStr != "" {
+			if t, err := time.Parse(time.RFC3339, startStr); err == nil {
+				tUTC := t.UTC()
+				startDate = &tUTC
+			} else if t, err := time.Parse("2006-01-02", startStr); err == nil {
+				tUTC := t.UTC()
+				startDate = &tUTC
+			}
+		}
+
+		var endDate *time.Time
+		endStr := c.Query("end_date")
+		if endStr != "" {
+			if t, err := time.Parse(time.RFC3339, endStr); err == nil {
+				tUTC := t.UTC()
+				endDate = &tUTC
+			} else if t, err := time.Parse("2006-01-02", endStr); err == nil {
+				tUTC := time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, time.UTC)
+				endDate = &tUTC
+			}
+		}
+
+		return sessionID, startDate, endDate
+	}
+
+	// Get Logs Endpoint
+	router.GET("/api/logs", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionID, startDate, endDate := parseQueryParams(c)
+
+		logs, err := database.GetLogs(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching logs:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch logs"})
@@ -274,15 +306,9 @@ func main() {
 
 	// Stats Overview Endpoint
 	router.GET("/api/stats/overview", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
-		stats, err := database.GetStatsOverview(sessionID)
+		stats, err := database.GetStatsOverview(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching overview stats:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch overview stats"})
@@ -293,15 +319,9 @@ func main() {
 
 	// Traffic Over Time Endpoint
 	router.GET("/api/stats/traffic", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
-		stats, err := database.GetTrafficStats(sessionID)
+		stats, err := database.GetTrafficStats(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching traffic stats:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch traffic stats"})
@@ -312,15 +332,9 @@ func main() {
 
 	// Top Endpoints Endpoint
 	router.GET("/api/stats/top-endpoints", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
-		stats, err := database.GetTopEndpoints(sessionID)
+		stats, err := database.GetTopEndpoints(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching top endpoints:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch top endpoints"})
@@ -331,15 +345,9 @@ func main() {
 
 	// Top IPs Endpoint
 	router.GET("/api/stats/top-ips", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
-		stats, err := database.GetTopIPs(sessionID)
+		stats, err := database.GetTopIPs(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching top IPs:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch top IPs"})
@@ -350,15 +358,9 @@ func main() {
 
 	// Status Codes Breakdown Endpoint
 	router.GET("/api/stats/status-codes", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
-		stats, err := database.GetStatusCodesStats(sessionID)
+		stats, err := database.GetStatusCodesStats(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching status codes stats:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch status codes stats"})
@@ -369,15 +371,9 @@ func main() {
 
 	// Browser Breakdown Endpoint
 	router.GET("/api/stats/browsers", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
-		stats, err := database.GetBrowsersStats(sessionID)
+		stats, err := database.GetBrowsersStats(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching browser stats:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch browser stats"})
@@ -388,15 +384,9 @@ func main() {
 
 	// Geographic Stats Endpoint
 	router.GET("/api/stats/geographic", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
-		stats, err := database.GetGeographicStats(sessionID)
+		stats, err := database.GetGeographicStats(sessionID, startDate, endDate)
 		if err != nil {
 			log.Println("Error fetching geographic stats:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch geographic stats"})
@@ -407,13 +397,7 @@ func main() {
 
 	// Error Logs with Pagination Endpoint
 	router.GET("/api/logs/errors", middleware.AuthRequired(), func(c *gin.Context) {
-		sessionIDStr := c.Query("session_id")
-		var sessionID *int
-		if sessionIDStr != "" {
-			if val, err := strconv.Atoi(sessionIDStr); err == nil {
-				sessionID = &val
-			}
-		}
+		sessionID, startDate, endDate := parseQueryParams(c)
 
 		limitStr := c.DefaultQuery("limit", "10")
 		offsetStr := c.DefaultQuery("offset", "0")
@@ -427,7 +411,7 @@ func main() {
 			offset = 0
 		}
 
-		logs, err := database.GetErrorLogs(sessionID, limit, offset)
+		logs, err := database.GetErrorLogs(sessionID, startDate, endDate, limit, offset)
 		if err != nil {
 			log.Println("Error fetching error logs:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch error logs"})

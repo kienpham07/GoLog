@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/kienpham07/GoLog/backend/models"
@@ -111,45 +112,44 @@ func InsertLogEntries(entries []models.LogEntry, sessionID int) error {
 	return nil
 }
 
-// GetLogs retrieves the most recent 100 log entries from the database, optionally filtered by session_id
-func GetLogs(sessionID *int) ([]models.LogEntry, error) {
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-	var err error
+func buildWhereClause(sessionID *int, startDate *time.Time, endDate *time.Time) (string, []interface{}) {
+	conditions := []string{}
+	args := []interface{}{}
 
 	if sessionID != nil {
-		stmt, err = DB.Prepare(`
-			SELECT 
-				id, COALESCE(ip, ''), timestamp, COALESCE(method, ''), COALESCE(endpoint, ''), 
-				COALESCE(protocol, ''), COALESCE(status, 0), COALESCE(bytes, 0), 
-				COALESCE(referrer, ''), COALESCE(user_agent, ''), COALESCE(response_time, 0), session_id
-			FROM logs 
-			WHERE session_id = $1 
-			ORDER BY timestamp DESC 
-			LIMIT 100
-		`)
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare get logs query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID)
-	} else {
-		stmt, err = DB.Prepare(`
-			SELECT 
-				id, COALESCE(ip, ''), timestamp, COALESCE(method, ''), COALESCE(endpoint, ''), 
-				COALESCE(protocol, ''), COALESCE(status, 0), COALESCE(bytes, 0), 
-				COALESCE(referrer, ''), COALESCE(user_agent, ''), COALESCE(response_time, 0), session_id
-			FROM logs 
-			ORDER BY timestamp DESC 
-			LIMIT 100
-		`)
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare get logs query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query()
+		args = append(args, *sessionID)
+		conditions = append(conditions, fmt.Sprintf("session_id = $%d", len(args)))
+	}
+	if startDate != nil {
+		args = append(args, *startDate)
+		conditions = append(conditions, fmt.Sprintf("timestamp >= $%d", len(args)))
+	}
+	if endDate != nil {
+		args = append(args, *endDate)
+		conditions = append(conditions, fmt.Sprintf("timestamp <= $%d", len(args)))
 	}
 
+	if len(conditions) > 0 {
+		return " WHERE " + strings.Join(conditions, " AND "), args
+	}
+	return "", args
+}
+
+// GetLogs retrieves log entries from the database, optionally filtered by session_id and date range
+func GetLogs(sessionID *int, startDate *time.Time, endDate *time.Time) ([]models.LogEntry, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	argLen := len(args)
+	query := fmt.Sprintf(`
+		SELECT 
+			id, COALESCE(ip, ''), timestamp, COALESCE(method, ''), COALESCE(endpoint, ''), 
+			COALESCE(protocol, ''), COALESCE(status, 0), COALESCE(bytes, 0), 
+			COALESCE(referrer, ''), COALESCE(user_agent, ''), COALESCE(response_time, 0), session_id
+		FROM logs%s
+		ORDER BY timestamp DESC LIMIT $%d
+	`, where, argLen+1)
+
+	args = append(args, 100)
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query logs: %w", err)
 	}
@@ -177,42 +177,24 @@ func GetLogs(sessionID *int) ([]models.LogEntry, error) {
 }
 
 // GetStatsOverview fetches basic request statistics
-func GetStatsOverview(sessionID *int) (*StatsOverview, error) {
-	var stmt *sql.Stmt
-	var row *sql.Row
-	var err error
-
-	baseQuery := `
+func GetStatsOverview(sessionID *int, startDate *time.Time, endDate *time.Time) (*StatsOverview, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	query := `
 		SELECT 
 			COUNT(*), 
 			COUNT(DISTINCT ip), 
 			COALESCE(SUM(bytes), 0), 
 			COUNT(CASE WHEN status >= 400 THEN 1 END) 
-		FROM logs
-	`
+		FROM logs` + where
 
-	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare overview query: %w", err)
-		}
-		defer stmt.Close()
-		row = stmt.QueryRow(*sessionID)
-	} else {
-		stmt, err = DB.Prepare(baseQuery)
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare overview query: %w", err)
-		}
-		defer stmt.Close()
-		row = stmt.QueryRow()
-	}
+	row := DB.QueryRow(query, args...)
 
 	var totalRequests int
 	var uniqueIPs int
 	var totalBytes int64
 	var errorRequests int
 
-	err = row.Scan(&totalRequests, &uniqueIPs, &totalBytes, &errorRequests)
+	err := row.Scan(&totalRequests, &uniqueIPs, &totalBytes, &errorRequests)
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan overview: %w", err)
 	}
@@ -231,34 +213,15 @@ func GetStatsOverview(sessionID *int) (*StatsOverview, error) {
 }
 
 // GetTrafficStats aggregates request counts grouped by hour
-func GetTrafficStats(sessionID *int) ([]TrafficStat, error) {
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-	var err error
-
-	baseQuery := `
+func GetTrafficStats(sessionID *int, startDate *time.Time, endDate *time.Time) ([]TrafficStat, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	query := `
 		SELECT 
 			DATE_TRUNC('hour', timestamp) AS hr, 
 			COUNT(*) 
-		FROM logs
-	`
+		FROM logs` + where + ` GROUP BY hr ORDER BY hr ASC`
 
-	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1 GROUP BY hr ORDER BY hr ASC")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare traffic query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID)
-	} else {
-		stmt, err = DB.Prepare(baseQuery + " GROUP BY hr ORDER BY hr ASC")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare traffic query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query()
-	}
-
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query traffic stats: %w", err)
 	}
@@ -281,29 +244,11 @@ func GetTrafficStats(sessionID *int) ([]TrafficStat, error) {
 }
 
 // GetTopEndpoints returns the top 10 most frequently accessed endpoints
-func GetTopEndpoints(sessionID *int) ([]TopEndpoint, error) {
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-	var err error
+func GetTopEndpoints(sessionID *int, startDate *time.Time, endDate *time.Time) ([]TopEndpoint, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	query := `SELECT endpoint, COUNT(*) as cnt FROM logs` + where + ` GROUP BY endpoint ORDER BY cnt DESC LIMIT 10`
 
-	baseQuery := "SELECT endpoint, COUNT(*) as cnt FROM logs"
-
-	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1 GROUP BY endpoint ORDER BY cnt DESC LIMIT 10")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare top endpoints query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID)
-	} else {
-		stmt, err = DB.Prepare(baseQuery + " GROUP BY endpoint ORDER BY cnt DESC LIMIT 10")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare top endpoints query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query()
-	}
-
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query top endpoints: %w", err)
 	}
@@ -322,11 +267,9 @@ func GetTopEndpoints(sessionID *int) ([]TopEndpoint, error) {
 }
 
 // GetTopIPs returns top client IPs and flags suspicious ones
-func GetTopIPs(sessionID *int) ([]TopIP, error) {
-	var rows *sql.Rows
-	var err error
-
-	queryWithSession := `
+func GetTopIPs(sessionID *int, startDate *time.Time, endDate *time.Time) ([]TopIP, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	query := `
 		WITH ip_counts AS (
 			SELECT 
 				ip, 
@@ -342,8 +285,7 @@ func GetTopIPs(sessionID *int) ([]TopIP, error) {
 					THEN 1 ELSE 0 
 				END) as sensitive_cnt,
 				SUM(CASE WHEN status = 401 THEN 1 ELSE 0 END) as auth_fail_cnt
-			FROM logs
-			WHERE session_id = $1
+			FROM logs` + where + `
 			GROUP BY ip
 		),
 		stats AS (
@@ -358,43 +300,7 @@ func GetTopIPs(sessionID *int) ([]TopIP, error) {
 		LIMIT 10
 	`
 
-	queryAll := `
-		WITH ip_counts AS (
-			SELECT 
-				ip, 
-				COUNT(*) as cnt,
-				SUM(CASE 
-					WHEN LOWER(endpoint) LIKE '%/.env%' 
-					  OR LOWER(endpoint) LIKE '%.env%'
-					  OR LOWER(endpoint) LIKE '%/wp-admin%'
-					  OR LOWER(endpoint) LIKE '%/wp-login.php%'
-					  OR LOWER(endpoint) LIKE '%/phpmyadmin%'
-					  OR LOWER(endpoint) LIKE '%/.git%'
-					  OR LOWER(endpoint) LIKE '%/config%'
-					THEN 1 ELSE 0 
-				END) as sensitive_cnt,
-				SUM(CASE WHEN status = 401 THEN 1 ELSE 0 END) as auth_fail_cnt
-			FROM logs
-			GROUP BY ip
-		),
-		stats AS (
-			SELECT COALESCE(AVG(cnt), 0) as avg_cnt FROM ip_counts
-		)
-		SELECT 
-			i.ip, 
-			i.cnt,
-			(i.sensitive_cnt > 0 OR i.auth_fail_cnt > 10 OR i.cnt > 600 OR (i.cnt >= (SELECT avg_cnt * 2.0 FROM stats) AND i.cnt >= 50)) as suspicious
-		FROM ip_counts i
-		ORDER BY i.cnt DESC
-		LIMIT 10
-	`
-
-	if sessionID != nil {
-		rows, err = DB.Query(queryWithSession, *sessionID)
-	} else {
-		rows, err = DB.Query(queryAll)
-	}
-
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query top IPs: %w", err)
 	}
@@ -413,29 +319,11 @@ func GetTopIPs(sessionID *int) ([]TopIP, error) {
 }
 
 // GetStatusCodesStats aggregates request counts by status code
-func GetStatusCodesStats(sessionID *int) ([]StatusCodeStat, error) {
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-	var err error
+func GetStatusCodesStats(sessionID *int, startDate *time.Time, endDate *time.Time) ([]StatusCodeStat, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	query := `SELECT status, COUNT(*) as cnt FROM logs` + where + ` GROUP BY status ORDER BY status ASC`
 
-	baseQuery := "SELECT status, COUNT(*) as cnt FROM logs"
-
-	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1 GROUP BY status ORDER BY status ASC")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare status codes query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID)
-	} else {
-		stmt, err = DB.Prepare(baseQuery + " GROUP BY status ORDER BY status ASC")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare status codes query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query()
-	}
-
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query status codes: %w", err)
 	}
@@ -454,12 +342,9 @@ func GetStatusCodesStats(sessionID *int) ([]StatusCodeStat, error) {
 }
 
 // GetBrowsersStats aggregates request counts by parsed browser from user agent
-func GetBrowsersStats(sessionID *int) ([]BrowserStat, error) {
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-	var err error
-
-	baseQuery := `
+func GetBrowsersStats(sessionID *int, startDate *time.Time, endDate *time.Time) ([]BrowserStat, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	query := `
 		SELECT 
 			CASE 
 				WHEN user_agent ILIKE '%bot%' OR user_agent ILIKE '%crawler%' OR user_agent ILIKE '%spider%' THEN 'Bot'
@@ -469,25 +354,12 @@ func GetBrowsersStats(sessionID *int) ([]BrowserStat, error) {
 				ELSE 'Other'
 			END as browser_name,
 			COUNT(*)
-		FROM logs
+		FROM logs` + where + `
+		GROUP BY browser_name
+		ORDER BY COUNT(*) DESC
 	`
 
-	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1 GROUP BY browser_name ORDER BY COUNT(*) DESC")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare browsers query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID)
-	} else {
-		stmt, err = DB.Prepare(baseQuery + " GROUP BY browser_name ORDER BY COUNT(*) DESC")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare browsers query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query()
-	}
-
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query browsers: %w", err)
 	}
@@ -506,36 +378,27 @@ func GetBrowsersStats(sessionID *int) ([]BrowserStat, error) {
 }
 
 // GetErrorLogs returns log entries where status >= 400 with pagination
-func GetErrorLogs(sessionID *int, limit, offset int) ([]models.LogEntry, error) {
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-	var err error
+func GetErrorLogs(sessionID *int, startDate *time.Time, endDate *time.Time, limit, offset int) ([]models.LogEntry, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
 
-	baseQuery := `
+	if where == "" {
+		where = " WHERE status >= 400"
+	} else {
+		where += " AND status >= 400"
+	}
+
+	argLen := len(args)
+	query := fmt.Sprintf(`
 		SELECT 
 			id, COALESCE(ip, ''), timestamp, COALESCE(method, ''), COALESCE(endpoint, ''), 
 			COALESCE(protocol, ''), COALESCE(status, 0), COALESCE(bytes, 0), 
 			COALESCE(referrer, ''), COALESCE(user_agent, ''), COALESCE(response_time, 0), session_id
-		FROM logs
-		WHERE status >= 400
-	`
+		FROM logs%s
+		ORDER BY timestamp DESC LIMIT $%d OFFSET $%d
+	`, where, argLen+1, argLen+2)
 
-	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " AND session_id = $1 ORDER BY timestamp DESC LIMIT $2 OFFSET $3")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare error logs query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID, limit, offset)
-	} else {
-		stmt, err = DB.Prepare(baseQuery + " ORDER BY timestamp DESC LIMIT $1 OFFSET $2")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare error logs query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(limit, offset)
-	}
-
+	args = append(args, limit, offset)
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query error logs: %w", err)
 	}
@@ -702,34 +565,17 @@ func GeolocateIP(ipStr string) GeoInfo {
 	return countriesList[idx]
 }
 
-func GetGeographicStats(sessionID *int) ([]GeoStat, error) {
-	var stmt *sql.Stmt
-	var rows *sql.Rows
-	var err error
-
-	baseQuery := `
+func GetGeographicStats(sessionID *int, startDate *time.Time, endDate *time.Time) ([]GeoStat, error) {
+	where, args := buildWhereClause(sessionID, startDate, endDate)
+	query := `
 		SELECT 
 			ip, 
 			COUNT(*) as cnt
-		FROM logs
+		FROM logs` + where + `
+		GROUP BY ip
 	`
 
-	if sessionID != nil {
-		stmt, err = DB.Prepare(baseQuery + " WHERE session_id = $1 GROUP BY ip")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare geographic stats query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query(*sessionID)
-	} else {
-		stmt, err = DB.Prepare(baseQuery + " GROUP BY ip")
-		if err != nil {
-			return nil, fmt.Errorf("failed to prepare geographic stats query: %w", err)
-		}
-		defer stmt.Close()
-		rows, err = stmt.Query()
-	}
-
+	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query geographic stats: %w", err)
 	}
