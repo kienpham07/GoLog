@@ -38,11 +38,12 @@ func main() {
 	// 3. Set up the Gin router
 	router := gin.Default()
 
-	// Enable CORS for the frontend
+	// Enable CORS for frontend applications
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:3000"},                             //Next.js port
-		AllowMethods: []string{"GET", "POST", "OPTIONS"},                            // Identify which kinds of requests are allowed for FE
-		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"}, // Identify HTTP Headers permitted in request
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "OPTIONS", "PUT", "DELETE"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowCredentials: true,
 	}))
 
 	// Limit the maximum memory for file uploads to 8 MB to prevent server crashes from massive files.
@@ -57,8 +58,8 @@ func main() {
 		start := time.Now()
 		c.Next()
 
-		// Do not broadcast the WebSocket connection handshakes themselves
-		if strings.HasPrefix(c.Request.URL.Path, "/api/logs/stream") {
+		// Do not broadcast the WebSocket connection handshakes or internal simulate calls to prevent duplicates
+		if strings.HasPrefix(c.Request.URL.Path, "/api/logs/stream") || c.Request.URL.Path == "/api/simulate" {
 			return
 		}
 
@@ -96,29 +97,63 @@ func main() {
 
 	// POST traffic simulation endpoint for live dashboard demo
 	router.POST("/api/simulate", func(c *gin.Context) {
+		var reqBody struct {
+			IP           string `json:"ip"`
+			Method       string `json:"method"`
+			Endpoint     string `json:"endpoint"`
+			Status       int    `json:"status"`
+			Bytes        int    `json:"bytes"`
+			ResponseTime int    `json:"response_time"`
+		}
+
+		_ = c.ShouldBindJSON(&reqBody)
+
 		endpoints := []string{"/api/products", "/api/auth/login", "/checkout", "/dashboard", "/api/users", "/search?q=shoes", "/api/cart"}
 		methods := []string{"GET", "POST", "PUT", "DELETE"}
 		statuses := []int{200, 200, 200, 304, 401, 404, 500}
 		ips := []string{"185.220.101.3", "45.33.32.156", "66.249.66.1", "192.0.2.55", "1.2.3.4"}
 
-		randEp := endpoints[rand.Intn(len(endpoints))]
-		randMethod := methods[rand.Intn(len(methods))]
-		randStatus := statuses[rand.Intn(len(statuses))]
-		randIP := ips[rand.Intn(len(ips))]
-		randBytes := rand.Intn(15000) + 120
-		randResponseTime := rand.Intn(250) + 15
+		ep := reqBody.Endpoint
+		if ep == "" {
+			ep = endpoints[rand.Intn(len(endpoints))]
+		}
+
+		method := reqBody.Method
+		if method == "" {
+			method = methods[rand.Intn(len(methods))]
+		}
+
+		status := reqBody.Status
+		if status == 0 {
+			status = statuses[rand.Intn(len(statuses))]
+		}
+
+		ip := reqBody.IP
+		if ip == "" {
+			ip = ips[rand.Intn(len(ips))]
+		}
+
+		bytesSent := reqBody.Bytes
+		if bytesSent == 0 {
+			bytesSent = rand.Intn(15000) + 120
+		}
+
+		responseTime := reqBody.ResponseTime
+		if responseTime == 0 {
+			responseTime = rand.Intn(250) + 15
+		}
 
 		payload, err := json.Marshal(gin.H{
 			"type": "log_entry",
 			"data": gin.H{
-				"ip":            randIP,
-				"method":        randMethod,
-				"endpoint":      randEp,
-				"status":        randStatus,
-				"bytes":         randBytes,
+				"ip":            ip,
+				"method":        method,
+				"endpoint":      ep,
+				"status":        status,
+				"bytes":         bytesSent,
 				"referrer":      "https://google.com",
 				"user_agent":    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-				"response_time": randResponseTime,
+				"response_time": responseTime,
 				"timestamp":     time.Now().UTC().Format(time.RFC3339),
 			},
 		})

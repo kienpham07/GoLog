@@ -48,10 +48,14 @@ export function useWebSocket(
       ws.onmessage = (event) => {
         if (!isMountedRef.current) return;
         try {
-          const parsed = JSON.parse(event.data);
-          setLastMessage(parsed);
-          if (onMessageRef.current) {
-            onMessageRef.current(parsed);
+          const raw = typeof event.data === "string" ? event.data : "";
+          const lines = raw.split("\n").filter((l) => l.trim().length > 0);
+          for (const line of lines) {
+            const parsed = JSON.parse(line);
+            setLastMessage(parsed);
+            if (onMessageRef.current) {
+              onMessageRef.current(parsed);
+            }
           }
         } catch (e) {
           console.error("Error parsing WebSocket JSON message:", e);

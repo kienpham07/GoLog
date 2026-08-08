@@ -22,14 +22,27 @@ interface LiveLogFeedProps {
 
 export default function LiveLogFeed({ logs, onClear, isConnected }: LiveLogFeedProps) {
   const [isPaused, setIsPaused] = useState(false);
+  const [frozenLogs, setFrozenLogs] = useState<StreamedLogEntry[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleTogglePause = () => {
+    setIsPaused((prev) => {
+      const nextState = !prev;
+      if (nextState) {
+        setFrozenLogs([...logs]);
+      }
+      return nextState;
+    });
+  };
+
+  const displayedLogs = isPaused ? frozenLogs : logs;
 
   // Auto-scroll to bottom when new logs arrive (if not paused)
   useEffect(() => {
     if (!isPaused && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [logs, isPaused]);
+  }, [displayedLogs, isPaused]);
 
   const getStatusBadgeColor = (status?: number) => {
     if (!status) return "bg-gray-700 text-gray-300 border-gray-600";
@@ -49,6 +62,11 @@ export default function LiveLogFeed({ logs, onClear, isConnected }: LiveLogFeedP
     }
   };
 
+  const handleClear = () => {
+    setFrozenLogs([]);
+    onClear();
+  };
+
   return (
     <div className="bg-cyber-card border border-cyber-border rounded-xl p-5 shadow-lg flex flex-col h-[380px]">
       {/* Panel Header */}
@@ -66,14 +84,14 @@ export default function LiveLogFeed({ logs, onClear, isConnected }: LiveLogFeedP
           </span>
           <h3 className="text-sm font-bold text-gray-200 tracking-wide">Live Log Feed</h3>
           <span className="text-[11px] font-mono text-gray-400 bg-cyber-bg px-2 py-0.5 rounded border border-cyber-border/60">
-            {logs.length} entries
+            {displayedLogs.length} entries {isPaused ? "(Paused)" : ""}
           </span>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setIsPaused((prev) => !prev)}
+            onClick={handleTogglePause}
             className={`px-3 py-1 text-xs font-mono font-bold rounded-lg border transition ${
               isPaused
                 ? "bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30"
@@ -84,7 +102,7 @@ export default function LiveLogFeed({ logs, onClear, isConnected }: LiveLogFeedP
           </button>
           <button
             type="button"
-            onClick={onClear}
+            onClick={handleClear}
             className="px-3 py-1 text-xs font-mono font-bold rounded-lg bg-cyber-bg border border-cyber-border text-gray-400 hover:text-rose-400 hover:border-rose-500/40 transition"
           >
             🗑 Clear
@@ -97,12 +115,12 @@ export default function LiveLogFeed({ logs, onClear, isConnected }: LiveLogFeedP
         ref={containerRef}
         className="flex-1 overflow-y-auto font-mono text-xs space-y-1.5 pr-2 scrollbar-thin scrollbar-thumb-cyber-border"
       >
-        {logs.length === 0 ? (
+        {displayedLogs.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500 italic">
             Waiting for live log stream entries...
           </div>
         ) : (
-          logs.map((log, index) => (
+          displayedLogs.map((log, index) => (
             <div
               key={`${log.timestamp}-${index}`}
               className="flex items-center justify-between bg-cyber-bg/70 hover:bg-cyber-bg border border-cyber-border/40 hover:border-cyber-border px-3 py-1.5 rounded-lg transition"
