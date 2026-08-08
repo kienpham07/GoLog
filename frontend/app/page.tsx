@@ -543,6 +543,23 @@ export default function Home() {
   const [errorSearchQuery, setErrorSearchQuery] = useState("");
   const [errorStatusCodeFilter, setErrorStatusCodeFilter] = useState("All");
 
+  // Paginated Time Bucket Breakdown (Traffic Over Time)
+  const [trafficPage, setTrafficPage] = useState(0);
+  const trafficLimit = 13;
+
+  useEffect(() => {
+    setTrafficPage(0);
+  }, [timeRangePreset, customStartDate, customEndDate, selectedSessionID, traffic.length]);
+
+  const totalTrafficEntries = traffic.length;
+  const totalTrafficPages = Math.ceil(totalTrafficEntries / trafficLimit) || 1;
+  const paginatedTraffic = useMemo(() => {
+    return traffic.slice(trafficPage * trafficLimit, (trafficPage + 1) * trafficLimit);
+  }, [traffic, trafficPage, trafficLimit]);
+
+  const trafficStartCount = totalTrafficEntries === 0 ? 0 : trafficPage * trafficLimit + 1;
+  const trafficEndCount = Math.min((trafficPage + 1) * trafficLimit, totalTrafficEntries);
+
   // Upload States
   const [uploadStatus, setUploadStatus] = useState<{
     parsed_count: number;
@@ -1679,12 +1696,12 @@ export default function Home() {
                         <tr>
                           <td colSpan={4} className="py-6 text-center text-gray-500 font-mono">Loading traffic buckets...</td>
                         </tr>
-                      ) : traffic.length === 0 ? (
+                      ) : totalTrafficEntries === 0 ? (
                         <tr>
                           <td colSpan={4} className="py-6 text-center text-gray-500 font-mono text-xs">No traffic data available</td>
                         </tr>
                       ) : (
-                        traffic.map((item, idx) => {
+                        paginatedTraffic.map((item, idx) => {
                           const total = overview?.total_requests || 1;
                           const pct = Math.min(100, Math.round((item.count / total) * 100));
                           return (
@@ -1706,6 +1723,40 @@ export default function Home() {
                       )}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Pagination Controls Footer */}
+                <div className="grid grid-cols-3 items-center w-full mt-6 border-t border-cyber-border/40 pt-4">
+                  <div className="flex justify-start items-center">
+                    <span className="text-xs text-gray-400 font-mono">
+                      Showing {trafficStartCount}–{trafficEndCount} of {totalTrafficEntries} entries
+                    </span>
+                  </div>
+
+                  <div className="text-center">
+                    <span className="text-xs text-gray-300 font-bold font-mono">
+                      Page {trafficPage + 1} of {totalTrafficPages}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-end items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={trafficPage === 0 || loading || totalTrafficEntries === 0}
+                      onClick={() => setTrafficPage((p) => p - 1)}
+                      className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-xs font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={trafficPage >= totalTrafficPages - 1 || loading || totalTrafficEntries === 0}
+                      onClick={() => setTrafficPage((p) => p + 1)}
+                      className="px-3 py-1.5 bg-cyber-bg border border-cyber-border rounded-lg text-xs font-bold text-gray-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
