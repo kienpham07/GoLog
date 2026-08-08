@@ -20,26 +20,12 @@ import {
 } from "recharts";
 import { useRouter } from "next/navigation";
 import WorldMap from "./components/WorldMap";
+import { useLogStream, type LogEntry } from "./hooks/useLogStream";
+import { useWebSocket, type WebSocketMessage } from "./hooks/useWebSocket";
+import LiveLogFeed, { type StreamedLogEntry } from "./components/LiveLogFeed";
 
 // Use an environment variable for the API URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
-
-// 1. Define the TypeScript Interface
-// 1. Define the TypeScript Interfaces
-interface LogEntry {
-  id: number;
-  ip: string;
-  timestamp: string;
-  method: string;
-  endpoint: string;
-  protocol: string;
-  status: number;
-  bytes: number;
-  referrer: string;
-  user_agent: string;
-  response_time: number;
-  session_id: number;
-}
 
 interface StatsOverview {
   total_requests: number;
@@ -498,6 +484,24 @@ export default function Home() {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
+  // Track unique IP addresses for live overview metrics
+  const uniqueIPsSetRef = useRef<Set<string>>(new Set());
+
+  // Memoized traffic dataset ensuring smooth line rendering even with 1 data point
+  const displayTraffic = useMemo(() => {
+    if (!traffic || traffic.length === 0) return [];
+    if (traffic.length === 1) {
+      const single = traffic[0];
+      const d = new Date(single.hour);
+      const prevDate = new Date(d.getTime() - 60 * 1000);
+      return [
+        { hour: prevDate.toISOString(), count: 0 },
+        single,
+      ];
+    }
+    return traffic;
+  }, [traffic]);
+
   const getDateQuery = useCallback(() => {
     if (timeRangePreset === '24h') {
       const start = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -634,6 +638,15 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isSimulatingTraffic, setIsSimulatingTraffic] = useState(false);
+
+  useEffect(() => {
+    if (!isSimulatingTraffic) return;
+    const interval = setInterval(() => {
+      fetch(`${API_BASE_URL}/api/simulate`, { method: "POST" }).catch(() => {});
+    }, 800);
+    return () => clearInterval(interval);
+  }, [isSimulatingTraffic]);
 
   useEffect(() => {
     setMounted(true);
@@ -759,6 +772,194 @@ export default function Home() {
   useEffect(() => {
     fetchErrorLogsData();
   }, [fetchErrorLogsData]);
+
+  // Live WebSocket Log Streaming Hook Integration
+  const handleLiveLogReceived = useCallback((newLog: LogEntry) => {
+    // 1. Stat Cards: Total Requests, Bandwidth, Error Rate, Unique IPs
+    if (newLog.ip) {
+      uniqueIPsSetRef.current.add(newLog.ip);
+    }
+
+    setOverview((prev) => {
+      if (!prev) {
+        return {
+          total_requests: 1,
+          unique_ips: uniqueIPsSetRef.current.size || 1,
+          error_rate: newLog.status >= 400 ? 1 : 0,
+          total_bytes: newLog.bytes || 0,
+        };
+      }
+      const newTotal = prev.total_requests + 1;
+      const isError = newLog.status >= 400;
+      const prevErrors = Math.round(prev.error_rate * prev.total_requests);
+      const newErrorRate = (prevErrors + (isError ? 1 : 0)) / newTotal;
+
+      return {
+        ...prev,
+        total_requests: newTotal,
+        unique_ips: Math.max(prev.unique_ips || 0, uniqueIPsSetRef.current.size),
+        total_bytes: prev.total_bytes + (newLog.bytes || 0),
+        error_rate: newErrorRate,
+      };
+    });
+
+    // 2. Traffic Over Time Graph (minute-level resolution)
+    if (newLog.timestamp) {
+      const logDate = new Date(newLog.timestamp);
+      logDate.setSeconds(0, 0);
+      const timeKey = logDate.toISOString();
+
+      setTraffic((prev) => {
+        const idx = prev.findIndex((t) => t.hour === timeKey);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], count: updated[idx].count + 1 };
+          return updated;
+        } else {
+          return [...prev, { hour: timeKey, count: 1 }];
+        }
+      });
+    }
+
+    // 3. Status Codes Breakdown
+    if (newLog.status) {
+      setStatusCodes((prev) => {
+        const idx = prev.findIndex((s) => s.status === newLog.status);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], count: updated[idx].count + 1 };
+          return updated;
+        } else {
+          return [...prev, { status: newLog.status, count: 1 }].sort((a, b) => a.status - b.status);
+        }
+      });
+    }
+
+    // 4. Error Logs Stream
+    if (newLog.status >= 400) {
+      setErrorLogs((prev) => [newLog, ...prev.slice(0, 49)]);
+    }
+  }, []);
+
+  const { connected: isLiveStreamConnected } = useLogStream({
+    onLogReceived: handleLiveLogReceived,
+  });
+
+  // WebSocket Token & State
+  const [wsToken, setWsToken] = useState<string | null>(null);
+  const [liveFeedLogs, setLiveFeedLogs] = useState<StreamedLogEntry[]>([]);
+
+  useEffect(() => {
+    const t = localStorage.getItem("token") || localStorage.getItem("golog_token");
+    setWsToken(t);
+  }, []);
+
+  // Handle incoming WebSocket messages (type: "log_entry" and "stats_update")
+  const handleWsMessage = useCallback((msg: WebSocketMessage) => {
+    if (msg.type === "log_entry" && msg.data) {
+      const newLog: StreamedLogEntry = msg.data;
+
+      // 1. Append to local live log feed (keep last 100 entries in state)
+      setLiveFeedLogs((prev) => [...prev.slice(-99), newLog]);
+
+      // 1. Unique IP Tracking & Overview Stat Cards
+      if (newLog.ip) {
+        uniqueIPsSetRef.current.add(newLog.ip);
+      }
+
+      setOverview((prev) => {
+        if (!prev) {
+          return {
+            total_requests: 1,
+            unique_ips: uniqueIPsSetRef.current.size || 1,
+            error_rate: (newLog.status || 200) >= 400 ? 1 : 0,
+            total_bytes: newLog.bytes || 0,
+          };
+        }
+        const newTotal = prev.total_requests + 1;
+        const isError = (newLog.status || 200) >= 400;
+        const prevErrors = Math.round(prev.error_rate * prev.total_requests);
+        const newErrorRate = (prevErrors + (isError ? 1 : 0)) / newTotal;
+
+        return {
+          ...prev,
+          total_requests: newTotal,
+          unique_ips: Math.max(prev.unique_ips || 0, uniqueIPsSetRef.current.size),
+          total_bytes: prev.total_bytes + (newLog.bytes || 0),
+          error_rate: newErrorRate,
+        };
+      });
+
+      // 2. Traffic Over Time Graph (minute-level resolution for live traffic stream)
+      if (newLog.timestamp) {
+        const logDate = new Date(newLog.timestamp);
+        logDate.setSeconds(0, 0);
+        const timeKey = logDate.toISOString();
+
+        setTraffic((prev) => {
+          const idx = prev.findIndex((t) => t.hour === timeKey);
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], count: updated[idx].count + 1 };
+            return updated;
+          } else {
+            return [...prev, { hour: timeKey, count: 1 }];
+          }
+        });
+      }
+
+      // 4. Update Status Codes breakdown counts in place
+      if (typeof newLog.status === "number") {
+        const statusCode = newLog.status;
+        setStatusCodes((prev) => {
+          const idx = prev.findIndex((s) => s.status === statusCode);
+          if (idx >= 0) {
+            const updated = [...prev];
+            updated[idx] = { ...updated[idx], count: updated[idx].count + 1 };
+            return updated;
+          } else {
+            return [...prev, { status: statusCode, count: 1 }].sort((a, b) => a.status - b.status);
+          }
+        });
+      }
+
+      // 5. Append to Error Logs if status >= 400
+      if ((newLog.status || 200) >= 400) {
+        setErrorLogs((prev) => [
+          {
+            id: Date.now(),
+            ip: newLog.ip || "0.0.0.0",
+            timestamp: newLog.timestamp || new Date().toISOString(),
+            method: newLog.method || "GET",
+            endpoint: newLog.endpoint || "/",
+            protocol: "HTTP/1.1",
+            status: newLog.status || 500,
+            bytes: newLog.bytes || 0,
+            referrer: newLog.referrer || "-",
+            user_agent: newLog.user_agent || "-",
+            response_time: newLog.response_time || 0,
+          },
+          ...prev.slice(0, 49),
+        ]);
+      }
+    } else if (msg.type === "stats_update" && msg.data) {
+      // Snap overview cards to authoritative values from server
+      const { total_requests, error_rate, total_bytes } = msg.data;
+      setOverview((prev) => ({
+        total_requests: total_requests ?? prev?.total_requests ?? 0,
+        unique_ips: prev?.unique_ips ?? 1,
+        error_rate: error_rate !== undefined ? error_rate / 100.0 : prev?.error_rate ?? 0,
+        total_bytes: total_bytes ?? prev?.total_bytes ?? 0,
+      }));
+    }
+  }, []);
+
+  // useWebSocket Custom Hook Integration
+  const { isConnected: isWsConnected, lastMessage: wsLastMessage, retryCount: wsRetryCount } = useWebSocket(
+    `${API_BASE_URL}/api/logs/stream`,
+    wsToken,
+    handleWsMessage
+  );
 
   // File Upload Handler
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -923,6 +1124,41 @@ export default function Home() {
 
                 {/* Actions: Session Select, Hidden File Input, Upload Button */}
                 <div className="flex flex-wrap items-center gap-3">
+                  {/* Connection Status Indicator */}
+                  {!wsToken ? (
+                    <div className="flex items-center gap-2 bg-gray-500/10 border border-gray-500/30 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono font-bold">
+                      <span>🔴 Not authenticated</span>
+                    </div>
+                  ) : isWsConnected ? (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                      </span>
+                      <span>🟢 Live</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-xs text-rose-400 font-mono font-bold">
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                      <span>
+                        🔴 Offline {wsRetryCount > 0 ? `(Reconnecting... attempt ${wsRetryCount})` : ""}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Traffic Simulation Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsSimulatingTraffic((prev) => !prev)}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-mono font-bold border transition ${
+                      isSimulatingTraffic
+                        ? "bg-amber-500/20 border-amber-500/50 text-amber-300 animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.3)]"
+                        : "bg-cyber-card border-cyber-border text-gray-300 hover:text-white hover:border-cyber-purple/50 shadow-sm"
+                    }`}
+                  >
+                    {isSimulatingTraffic ? "⚡ Stop Traffic Sim" : "⚡ Simulate Traffic"}
+                  </button>
+
                   {/* Time Range Filter Dropdown */}
                   <div className="relative">
                     <select
@@ -1166,7 +1402,7 @@ export default function Home() {
                           </div>
                         ) : (
                           <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={traffic} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <LineChart data={displayTraffic} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" />
                               <XAxis dataKey="hour" stroke="#4b5563" fontSize={9} tickLine={false} tickFormatter={formatHour} className="font-mono" />
                               <YAxis stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
@@ -1185,8 +1421,9 @@ export default function Home() {
                                 name="Requests"
                                 stroke="#8951FF"
                                 strokeWidth={2.5}
-                                dot={false}
+                                dot={{ r: 4, fill: "#8951FF", stroke: "#ffffff", strokeWidth: 1.5 }}
                                 activeDot={{ r: 6 }}
+                                isAnimationActive={false}
                               />
                             </LineChart>
                           </ResponsiveContainer>
@@ -1243,6 +1480,15 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Live Log Feed Panel */}
+              <div className="mb-8">
+                <LiveLogFeed
+                  logs={liveFeedLogs}
+                  onClear={() => setLiveFeedLogs([])}
+                  isConnected={isWsConnected}
+                />
               </div>
 
               {/* Tables Row: Top pages & Top IPs */}

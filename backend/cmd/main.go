@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
+	"math/rand"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -12,6 +14,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/kienpham07/GoLog/backend/database"
+	"github.com/kienpham07/GoLog/backend/internal"
 	"github.com/kienpham07/GoLog/backend/middleware"
 	"github.com/kienpham07/GoLog/backend/models"
 	"github.com/kienpham07/GoLog/backend/services"
@@ -45,11 +48,90 @@ func main() {
 	// Limit the maximum memory for file uploads to 8 MB to prevent server crashes from massive files.
 	router.MaxMultipartMemory = maxUploadSize
 
+	// Initialize WebSocket Hub
+	hub := internal.NewHub()
+	go hub.Run()
+
+	// Middleware to broadcast all live incoming HTTP requests to WebSocket clients
+	router.Use(func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+
+		// Do not broadcast the WebSocket connection handshakes themselves
+		if strings.HasPrefix(c.Request.URL.Path, "/api/logs/stream") {
+			return
+		}
+
+		duration := time.Since(start).Milliseconds()
+		bytesSent := int64(c.Writer.Size())
+		if bytesSent < 0 {
+			bytesSent = 0
+		}
+
+		payload, err := json.Marshal(gin.H{
+			"type": "log_entry",
+			"data": gin.H{
+				"ip":            c.ClientIP(),
+				"method":        c.Request.Method,
+				"endpoint":      c.Request.URL.Path,
+				"status":        c.Writer.Status(),
+				"bytes":         bytesSent,
+				"referrer":      c.Request.Referer(),
+				"user_agent":    c.Request.UserAgent(),
+				"response_time": duration,
+				"timestamp":     time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+		if err == nil {
+			hub.Broadcast <- payload
+		}
+	})
+
 	// GET health-check endpoint
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"message": "pong",
 		})
+	})
+
+	// POST traffic simulation endpoint for live dashboard demo
+	router.POST("/api/simulate", func(c *gin.Context) {
+		endpoints := []string{"/api/products", "/api/auth/login", "/checkout", "/dashboard", "/api/users", "/search?q=shoes", "/api/cart"}
+		methods := []string{"GET", "POST", "PUT", "DELETE"}
+		statuses := []int{200, 200, 200, 304, 401, 404, 500}
+		ips := []string{"185.220.101.3", "45.33.32.156", "66.249.66.1", "192.0.2.55", "1.2.3.4"}
+
+		randEp := endpoints[rand.Intn(len(endpoints))]
+		randMethod := methods[rand.Intn(len(methods))]
+		randStatus := statuses[rand.Intn(len(statuses))]
+		randIP := ips[rand.Intn(len(ips))]
+		randBytes := rand.Intn(15000) + 120
+		randResponseTime := rand.Intn(250) + 15
+
+		payload, err := json.Marshal(gin.H{
+			"type": "log_entry",
+			"data": gin.H{
+				"ip":            randIP,
+				"method":        randMethod,
+				"endpoint":      randEp,
+				"status":        randStatus,
+				"bytes":         randBytes,
+				"referrer":      "https://google.com",
+				"user_agent":    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
+				"response_time": randResponseTime,
+				"timestamp":     time.Now().UTC().Format(time.RFC3339),
+			},
+		})
+		if err == nil {
+			hub.Broadcast <- payload
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Simulated log broadcasted"})
+	})
+
+	// GET WebSocket Log Streaming Endpoint (JWT protected)
+	router.GET("/api/logs/stream", middleware.AuthRequired(), func(c *gin.Context) {
+		internal.ServeWs(hub, c)
 	})
 
 	// --------------------------------------------------------
@@ -199,6 +281,43 @@ func main() {
 			log.Println("Error saving logs to database:", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save logs"})
 			return
+		}
+
+		// Emit newly ingested log entries to WebSocket subscribers
+		for _, entry := range parsedLogs {
+			logPayload, err := json.Marshal(gin.H{
+				"type": "log_entry",
+				"data": gin.H{
+					"ip":            entry.IP,
+					"method":        entry.Method,
+					"endpoint":      entry.Endpoint,
+					"status":        entry.Status,
+					"bytes":         entry.Bytes,
+					"referrer":      entry.Referrer,
+					"user_agent":    entry.UserAgent,
+					"response_time": entry.ResponseTime,
+					"timestamp":     entry.Timestamp.UTC().Format(time.RFC3339),
+				},
+			})
+			if err == nil {
+				hub.Broadcast <- logPayload
+			}
+		}
+
+		// Broadcast stats_update event after all lines are parsed and inserted
+		overview, err := database.GetStatsOverview(nil, nil, nil)
+		if err == nil && overview != nil {
+			statsPayload, err := json.Marshal(gin.H{
+				"type": "stats_update",
+				"data": gin.H{
+					"total_requests": overview.TotalRequests,
+					"error_rate":     overview.ErrorRate * 100.0,
+					"total_bytes":    overview.TotalBytes,
+				},
+			})
+			if err == nil {
+				hub.Broadcast <- statsPayload
+			}
 		}
 
 		// Calculate date range from parsed logs

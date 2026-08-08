@@ -12,21 +12,25 @@ import (
 // AuthRequired acts as a bouncer for protected routes
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. Look for the Authorization header
+		// 1. Look for the Authorization header or token query parameter
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
-			return
+		tokenString := ""
+
+		if authHeader != "" {
+			parts := strings.Fields(authHeader)
+			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+				tokenString = parts[1]
+			}
 		}
 
-		// 2. Ensure it follows the "Bearer <token>" format
-		parts := strings.Fields(authHeader)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token format"})
-			return
+		if tokenString == "" {
+			tokenString = c.Query("token")
 		}
 
-		tokenString := parts[1]
+		if tokenString == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header or token parameter missing"})
+			return
+		}
 
 		// 3. Parse and validate the token
 		token, err := utils.ValidateToken(tokenString)
