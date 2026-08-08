@@ -176,8 +176,8 @@ function GlobeIcon(props: SVGProps<SVGSVGElement>) {
 }
 
 interface TopNavigationProps {
-  currentView: 'dashboard' | 'error-logs' | 'geographic-map';
-  onViewChange: (view: 'dashboard' | 'error-logs' | 'geographic-map') => void;
+  currentView: 'dashboard' | 'traffic-over-time' | 'error-logs' | 'geographic-map';
+  onViewChange: (view: 'dashboard' | 'traffic-over-time' | 'error-logs' | 'geographic-map') => void;
   onLogout: () => void;
   username: string;
 }
@@ -222,6 +222,21 @@ function TopNavigation({
               >
                 <DashboardIcon className="h-4 w-4 shrink-0" />
                 <span>Dashboard</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onViewChange('traffic-over-time')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                  currentView === 'traffic-over-time'
+                    ? 'bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.4)]'
+                    : 'text-gray-400 hover:bg-cyber-card hover:text-white'
+                }`}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4 shrink-0">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                <span>Traffic Over Time</span>
               </button>
 
               <button
@@ -363,7 +378,7 @@ export default function Home() {
     }
     return "User";
   });
-  const [currentView, setCurrentView] = useState<'dashboard' | 'error-logs' | 'geographic-map'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'traffic-over-time' | 'error-logs' | 'geographic-map'>('dashboard');
   const [searchQuery, setSearchQuery] = useState("");
 
   // Aggregation States
@@ -1278,59 +1293,22 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Charts grid: Traffic & Status Codes */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-                {/* 3. Traffic line chart */}
-                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm lg:col-span-2 flex flex-col justify-between">
-                  <div>
-                    <h3 className="text-base font-bold text-white mb-1">Traffic Over Time</h3>
-                    <p className="text-xs text-gray-400 font-mono mb-6">Total requests grouped hourly</p>
-                    <div className="h-60">
-                      {mounted && !loading ? (
-                        traffic.length === 0 ? (
-                          <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
-                            No data available for this date range
-                          </div>
-                        ) : (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={displayTraffic} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" />
-                              <XAxis dataKey="hour" stroke="#4b5563" fontSize={9} tickLine={false} tickFormatter={formatHour} className="font-mono" />
-                              <YAxis stroke="#4b5563" fontSize={9} tickLine={false} className="font-mono" />
-                              <Tooltip
-                                contentStyle={{
-                                  backgroundColor: "#121620",
-                                  borderColor: "#1E2530",
-                                  borderRadius: "8px",
-                                  boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
-                                }}
-                                labelFormatter={formatHour}
-                              />
-                              <Line
-                                type="monotone"
-                                dataKey="count"
-                                name="Requests"
-                                stroke="#8951FF"
-                                strokeWidth={2.5}
-                                dot={{ r: 4, fill: "#8951FF", stroke: "#ffffff", strokeWidth: 1.5 }}
-                                activeDot={{ r: 6 }}
-                                isAnimationActive={false}
-                              />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        )
-                      ) : (
-                        <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
-                      )}
-                    </div>
-                  </div>
+              {/* Charts grid: Live Log Feed & Status Codes */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8 items-stretch">
+                {/* Live Log Feed Panel (Occupying left 2 columns) */}
+                <div className="lg:col-span-2">
+                  <LiveLogFeed
+                    logs={liveFeedLogs}
+                    onClear={() => setLiveFeedLogs([])}
+                    isConnected={isWsConnected}
+                  />
                 </div>
 
-                {/* 4. Status Code breakdown Donut chart */}
-                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between">
+                {/* Status Code breakdown Donut chart (Occupying right 1 column) */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm flex flex-col justify-between h-[380px]">
                   <div>
                     <h3 className="text-base font-bold text-white mb-1">Status Codes</h3>
-                    <p className="text-xs text-gray-400 font-mono mb-6">Breakdown of response classes</p>
+                    <p className="text-xs text-gray-400 font-mono mb-4">Breakdown of response classes</p>
                     <div className="h-60 flex items-center justify-center">
                       {mounted && !loading ? (
                         statusCodes.length === 0 ? (
@@ -1371,15 +1349,6 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Live Log Feed Panel */}
-              <div className="mb-8">
-                <LiveLogFeed
-                  logs={liveFeedLogs}
-                  onClear={() => setLiveFeedLogs([])}
-                  isConnected={isWsConnected}
-                />
               </div>
 
               {/* Tables Row: Top pages & Top IPs */}
@@ -1539,6 +1508,204 @@ export default function Home() {
                   ) : (
                     <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
                   )}
+                </div>
+              </div>
+            </>
+          ) : currentView === 'traffic-over-time' ? (
+            <>
+              {/* Traffic Over Time Title & Filters Section */}
+              <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h1 className="text-2xl font-extrabold text-white tracking-wide">
+                    Traffic Over Time Analytics
+                  </h1>
+                  <p className="text-xs text-gray-400 font-mono mt-1 uppercase tracking-wider text-[10px]">
+                    Real-time request volume, timeline trends, and hourly distribution
+                  </p>
+                </div>
+
+                {/* Status Indicator & Controls */}
+                <div className="flex flex-wrap items-center gap-3">
+                  {!wsToken ? (
+                    <div className="flex items-center gap-2 bg-gray-500/10 border border-gray-500/30 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono font-bold">
+                      <span>🔴 Not authenticated</span>
+                    </div>
+                  ) : isWsConnected ? (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                      </span>
+                      <span>🟢 Live Streaming</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-xs text-rose-400 font-mono font-bold">
+                      <span>🔴 Disconnected</span>
+                    </div>
+                  )}
+
+                  {/* Time Range Preset Dropdown */}
+                  <select
+                    value={timeRangePreset}
+                    onChange={(e) => setTimeRangePreset(e.target.value as any)}
+                    className="bg-cyber-card border border-cyber-border rounded-lg text-xs font-bold text-gray-300 px-3 py-2 outline-none cursor-pointer hover:border-cyber-purple transition"
+                  >
+                    <option value="all">All Time</option>
+                    <option value="24h">Last 24 Hours</option>
+                    <option value="7d">Last 7 Days</option>
+                    <option value="custom">Custom Range</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dedicated Metric Cards for Traffic */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {/* Card 1: Total Volume */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+                  <span className="text-[10px] font-extrabold text-cyber-purple uppercase tracking-wider font-mono">
+                    Total Volume
+                  </span>
+                  <h2 className="text-2xl font-black text-white mt-2 font-mono">
+                    {formatCount(overview?.total_requests || 0)}
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">Aggregated log requests</p>
+                </div>
+
+                {/* Card 2: Peak Hourly Count */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+                  <span className="text-[10px] font-extrabold text-cyber-cyan uppercase tracking-wider font-mono">
+                    Peak Interval Rate
+                  </span>
+                  <h2 className="text-2xl font-black text-white mt-2 font-mono">
+                    {formatCount(traffic.length > 0 ? Math.max(...traffic.map((t) => t.count)) : 0)}
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">Highest single interval</p>
+                </div>
+
+                {/* Card 3: Active Time Windows */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+                  <span className="text-[10px] font-extrabold text-emerald-400 uppercase tracking-wider font-mono">
+                    Time Intervals
+                  </span>
+                  <h2 className="text-2xl font-black text-white mt-2 font-mono">
+                    {traffic.length}
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">Active time buckets</p>
+                </div>
+
+                {/* Card 4: Avg Requests / Interval */}
+                <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm">
+                  <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider font-mono">
+                    Avg Interval Rate
+                  </span>
+                  <h2 className="text-2xl font-black text-white mt-2 font-mono">
+                    {traffic.length > 0 ? Math.round((overview?.total_requests || 0) / traffic.length) : 0}
+                  </h2>
+                  <p className="text-xs text-gray-400 mt-1">Requests per bucket</p>
+                </div>
+              </div>
+
+              {/* Expanded Dedicated Traffic Line Chart */}
+              <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm mb-8 w-full">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-white mb-1">Traffic Timeline Analysis</h3>
+                    <p className="text-xs text-gray-400 font-mono">
+                      Interactive request timeline graph grouped chronologically
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="h-3 w-3 rounded-full bg-cyber-purple inline-block" />
+                    <span className="text-xs text-gray-300 font-mono font-bold">Request Volume</span>
+                  </div>
+                </div>
+
+                <div className="h-96 w-full">
+                  {mounted && !loading ? (
+                    displayTraffic.length === 0 ? (
+                      <div className="h-full flex items-center justify-center text-gray-500 font-mono text-xs">
+                        No traffic data available for this date range
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={displayTraffic} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1E2530" />
+                          <XAxis dataKey="hour" stroke="#4b5563" fontSize={10} tickLine={false} tickFormatter={formatHour} className="font-mono" />
+                          <YAxis stroke="#4b5563" fontSize={10} tickLine={false} className="font-mono" />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "#121620",
+                              borderColor: "#1E2530",
+                              borderRadius: "8px",
+                              boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+                            }}
+                            labelFormatter={formatHour}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="count"
+                            name="Requests"
+                            stroke="#8951FF"
+                            strokeWidth={3}
+                            dot={{ r: 5, fill: "#8951FF", stroke: "#ffffff", strokeWidth: 2 }}
+                            activeDot={{ r: 8 }}
+                            isAnimationActive={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )
+                  ) : (
+                    <div className="h-full w-full bg-cyber-bg/40 animate-pulse rounded-lg" />
+                  )}
+                </div>
+              </div>
+
+              {/* Detailed Traffic Intervals Breakdown Table */}
+              <div className="bg-cyber-card p-6 rounded-xl border border-cyber-border shadow-sm mb-8 w-full">
+                <h3 className="text-base font-bold text-white mb-1">Time Bucket Breakdown</h3>
+                <p className="text-xs text-gray-400 font-mono mb-4">Request distribution across time intervals</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-cyber-border text-gray-400 font-mono">
+                        <th className="pb-3 font-semibold">Time Window</th>
+                        <th className="pb-3 font-semibold text-right">Request Count</th>
+                        <th className="pb-3 font-semibold text-right">% of Total</th>
+                        <th className="pb-3 font-semibold w-48 pl-6">Volume Share</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-cyber-border/30">
+                      {loading ? (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-gray-500 font-mono">Loading traffic buckets...</td>
+                        </tr>
+                      ) : traffic.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="py-6 text-center text-gray-500 font-mono text-xs">No traffic data available</td>
+                        </tr>
+                      ) : (
+                        traffic.map((item, idx) => {
+                          const total = overview?.total_requests || 1;
+                          const pct = Math.min(100, Math.round((item.count / total) * 100));
+                          return (
+                            <tr key={idx} className="hover:bg-cyber-bg/30 transition-colors">
+                              <td className="py-3 font-mono text-gray-200">{formatHour(item.hour)}</td>
+                              <td className="py-3 font-mono text-right font-bold text-cyber-cyan">{formatCount(item.count)}</td>
+                              <td className="py-3 font-mono text-right font-bold text-gray-300">{pct}%</td>
+                              <td className="py-3 pl-6">
+                                <div className="w-full bg-cyber-bg/60 h-2.5 rounded-full overflow-hidden border border-cyber-border/40">
+                                  <div
+                                    className="bg-gradient-to-r from-cyber-purple to-cyber-cyan h-full rounded-full transition-all duration-300"
+                                    style={{ width: `${Math.max(pct, 2)}%` }}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </>
