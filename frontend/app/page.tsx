@@ -175,170 +175,86 @@ function GlobeIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-interface SidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface TopNavigationProps {
   currentView: 'dashboard' | 'error-logs' | 'geographic-map';
   onViewChange: (view: 'dashboard' | 'error-logs' | 'geographic-map') => void;
+  onLogout: () => void;
+  username: string;
 }
 
-function Sidebar({ isOpen, onClose, currentView, onViewChange }: SidebarProps) {
-  return (
-    <>
-      {/* Mobile Backdrop */}
-      {isOpen && (
-        <div
-          onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm lg:hidden transition-opacity"
-        />
-      )}
+function TopNavigation({
+  currentView,
+  onViewChange,
+  onLogout,
+  username,
+}: TopNavigationProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-      {/* Sidebar Container */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 flex transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
-          isOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-      >
-        {/* Main Text Menu Sidebar */}
-        <div className="w-[198px] bg-cyber-card flex flex-col justify-between py-6 px-4 border-r border-cyber-border">
-          <div className="flex flex-col gap-6">
-            {/* Brand Title with unified 'G' logo and 'GoLog' text */}
-            <div className="flex items-center gap-2.5 justify-start pl-4 relative w-full">
-              {/* Logo Icon */}
+  return (
+    <header className="relative z-20 border-b border-cyber-border bg-cyber-bg/95 backdrop-blur shrink-0 w-full">
+      <div className="max-w-[1720px] mx-auto w-full px-4 sm:px-6 lg:px-8">
+        <div className="flex h-20 items-center justify-between gap-4 sm:gap-8">
+          {/* Left Aligned: Logo & Section Navigation Links */}
+          <div className="flex items-center gap-6 sm:gap-8">
+            {/* Logo */}
+            <div
+              onClick={() => onViewChange('dashboard')}
+              className="flex items-center gap-2.5 shrink-0 cursor-pointer"
+            >
               <div className="h-8 w-8 flex items-center justify-center rounded-lg bg-gradient-to-tr from-cyber-blue via-cyber-purple to-cyber-cyan text-white font-extrabold text-sm shadow-[0_0_12px_rgba(137,81,255,0.35)] shrink-0">
                 G
               </div>
               <span className="text-xl font-extrabold text-white tracking-wider">
                 GoLog
               </span>
-              {/* Close button on mobile */}
-              <button
-                type="button"
-                onClick={onClose}
-                aria-label="Close menu"
-                className="absolute right-0 grid h-8 w-8 place-items-center rounded-full text-gray-400 hover:bg-cyber-bg focus:outline-none lg:hidden"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
             </div>
 
-            {/* Navigation Lists */}
-            <nav className="flex flex-col gap-1">
-              {/* Dashboard view link */}
+            {/* Navigation Section Links */}
+            <nav className="flex items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  onViewChange('dashboard');
-                  onClose();
-                }}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                onClick={() => onViewChange('dashboard')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
                   currentView === 'dashboard'
                     ? 'bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.4)]'
-                    : 'text-gray-400 hover:bg-cyber-bg hover:text-white'
+                    : 'text-gray-400 hover:bg-cyber-card hover:text-white'
                 }`}
               >
                 <DashboardIcon className="h-4 w-4 shrink-0" />
                 <span>Dashboard</span>
               </button>
 
-              {/* Error Logs view link */}
               <button
                 type="button"
-                onClick={() => {
-                  onViewChange('error-logs');
-                  onClose();
-                }}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                onClick={() => onViewChange('error-logs')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
                   currentView === 'error-logs'
                     ? 'bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.4)]'
-                    : 'text-gray-400 hover:bg-cyber-bg hover:text-white'
+                    : 'text-gray-400 hover:bg-cyber-card hover:text-white'
                 }`}
               >
                 <LogsIcon className="h-4 w-4 shrink-0" />
                 <span>Error Logs</span>
               </button>
 
-              {/* Geographic Map view link */}
               <button
                 type="button"
-                onClick={() => {
-                  onViewChange('geographic-map');
-                  onClose();
-                }}
-                className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                onClick={() => onViewChange('geographic-map')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
                   currentView === 'geographic-map'
                     ? 'bg-cyber-purple text-white shadow-[0_0_15px_rgba(137,81,255,0.4)]'
-                    : 'text-gray-400 hover:bg-cyber-bg hover:text-white'
+                    : 'text-gray-400 hover:bg-cyber-card hover:text-white'
                 }`}
               >
                 <GlobeIcon className="h-4 w-4 shrink-0" />
-                <span>Geographic Map</span>
+                <span className="hidden sm:inline">Geographic Map</span>
+                <span className="sm:hidden">Map</span>
               </button>
             </nav>
           </div>
-        </div>
-      </aside>
-    </>
-  );
-}
 
-interface TopNavigationProps {
-  searchQuery: string;
-  onSearchChange: (value: string) => void;
-  onLogout: () => void;
-  onToggleSidebar: () => void;
-  username: string;
-}
-
-function TopNavigation({
-  searchQuery,
-  onSearchChange,
-  onLogout,
-  onToggleSidebar,
-  username,
-}: TopNavigationProps) {
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
-  return (
-    <header className="relative z-20 border-b border-cyber-border bg-cyber-bg/95 backdrop-blur shrink-0">
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8">
-        <div className="flex h-20 items-center justify-between gap-4">
-          <div className="flex items-center gap-4 flex-1">
-            {/* Mobile Trigger and Logo */}
-            <div className="flex shrink-0 items-center gap-4 lg:hidden">
-              <button
-                type="button"
-                onClick={onToggleSidebar}
-                aria-label="Open navigation menu"
-                className="grid h-10 w-10 place-items-center rounded-full text-gray-400 transition hover:bg-cyber-card focus:outline-none"
-              >
-                <MenuIcon className="h-6 w-6" />
-              </button>
-
-              {/* Mobile Logo */}
-              <div className="text-lg font-extrabold tracking-normal text-white">
-                <span className="text-cyber-purple">Go</span>Log
-              </div>
-            </div>
-
-            {/* Top Search bar */}
-            <label className="relative hidden min-w-[260px] max-w-[430px] flex-1 md:block">
-              <span className="sr-only">Search logs</span>
-              <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
-              <input
-                type="search"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(event) => onSearchChange(event.target.value)}
-                className="h-11 w-full rounded-full border border-cyber-border bg-cyber-card pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-cyber-purple focus:ring-4 focus:ring-cyber-purple/15"
-              />
-            </label>
-          </div>
-
+          {/* Right Aligned: User Profile Dropdown */}
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
-            {/* Backdrop to close dropdown on click outside */}
             {isDropdownOpen && (
               <div
                 className="fixed inset-0 z-30 bg-transparent"
@@ -406,21 +322,6 @@ function TopNavigation({
           </div>
         </div>
       </div>
-
-      {/* Mobile search bar */}
-      <div className="px-4 pb-4 md:hidden">
-        <label className="relative block">
-          <span className="sr-only">Search logs</span>
-          <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
-          <input
-            type="search"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(event) => onSearchChange(event.target.value)}
-            className="h-11 w-full rounded-full border border-cyber-border bg-cyber-card pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-500 focus:border-cyber-purple"
-          />
-        </label>
-      </div>
     </header>
   );
 }
@@ -462,9 +363,8 @@ export default function Home() {
     }
     return "User";
   });
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'dashboard' | 'error-logs' | 'geographic-map'>('dashboard');
-  const [searchQuery, setSearchQuery] = useState(""); // top bar search
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Aggregation States
   const [selectedSessionID, setSelectedSessionID] = useState<number | null>(null);
@@ -1091,24 +991,15 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen bg-cyber-bg text-white font-sans">
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
+    <div className="min-h-screen bg-cyber-bg text-white font-sans flex flex-col w-full">
+      <TopNavigation
         currentView={currentView}
         onViewChange={setCurrentView}
+        onLogout={handleLogout}
+        username={username}
       />
 
-      <div className="flex-1 flex flex-col min-w-0 bg-cyber-bg">
-        <TopNavigation
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          onLogout={handleLogout}
-          onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-          username={username}
-        />
-
-        <main className="flex-1 flex flex-col px-4 py-8 sm:px-6 lg:px-8 w-full max-w-7xl mx-auto">
+      <main className="flex-1 flex flex-col px-4 py-8 sm:px-6 lg:px-8 w-full max-w-[1720px] mx-auto">
           {currentView === 'dashboard' ? (
             <>
               {/* Top Title & Actions Section */}
@@ -1526,7 +1417,7 @@ export default function Home() {
                               className="border-b border-cyber-border/30 hover:bg-cyber-bg/30 transition-colors"
                             >
                               <td className="py-3 font-mono text-gray-400">{index + 1}</td>
-                              <td className="py-3 font-mono text-cyber-cyan truncate max-w-[280px]">
+                              <td className="py-3 font-mono text-cyber-cyan truncate max-w-[450px]">
                                 {item.endpoint}
                               </td>
                               <td className="py-3 font-mono text-right font-bold text-white">
@@ -1708,7 +1599,7 @@ export default function Home() {
                         <th className="pb-3 font-semibold">IP Address</th>
                         <th className="pb-3 font-semibold">Path</th>
                         <th className="pb-3 font-semibold w-16">Status</th>
-                        <th className="pb-3 font-semibold truncate max-w-[200px]">User Agent</th>
+                        <th className="pb-3 font-semibold truncate max-w-[380px]">User Agent</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-cyber-border/30">
@@ -1734,7 +1625,7 @@ export default function Home() {
                               {formatUTCTimestamp(log.timestamp)}
                             </td>
                             <td className="py-3 font-mono text-cyber-cyan">{log.ip}</td>
-                            <td className="py-3 font-mono text-gray-200 truncate max-w-[200px]" title={log.endpoint}>
+                            <td className="py-3 font-mono text-gray-200 truncate max-w-[380px]" title={log.endpoint}>
                               {log.endpoint}
                             </td>
                             <td className="py-3">
@@ -1742,7 +1633,7 @@ export default function Home() {
                                 {log.status}
                               </span>
                             </td>
-                            <td className="py-3 font-mono text-gray-400 truncate max-w-[200px]" title={log.user_agent}>
+                            <td className="py-3 font-mono text-gray-400 truncate max-w-[380px]" title={log.user_agent}>
                               {log.user_agent}
                             </td>
                           </tr>
@@ -1973,7 +1864,6 @@ export default function Home() {
             </div>
           )}
         </main>
-      </div>
     </div>
   );
 }
