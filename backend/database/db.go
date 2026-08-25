@@ -148,5 +148,21 @@ func InitSchema() {
 		}
 	}
 
+	// 6. Create connected_sites table
+	connectedSitesQuery := `
+	CREATE TABLE IF NOT EXISTS connected_sites (
+		id SERIAL PRIMARY KEY,
+		user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+		domain VARCHAR(255) NOT NULL,
+		api_key VARCHAR(100) UNIQUE NOT NULL,
+		is_connected BOOLEAN DEFAULT FALSE,
+		last_ping_at TIMESTAMP,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	_, err = DB.Exec(connectedSitesQuery)
+	if err != nil {
+		log.Println("Note during connected_sites schema initialization: ", err)
+	}
+
 	fmt.Println("✅ Database schemas initialized and migrated!")
 }

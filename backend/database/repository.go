@@ -610,3 +610,155 @@ func GetGeographicStats(sessionID *int, startDate *time.Time, endDate *time.Time
 
 	return stats, nil
 }
+
+// GetConnectedSiteByUser retrieves the connected site record for a user
+func GetConnectedSiteByUser(userID int) (*models.ConnectedSite, error) {
+	row := DB.QueryRow("SELECT id, user_id, domain, api_key, is_connected, last_ping_at, created_at FROM connected_sites WHERE user_id = $1 ORDER BY id DESC LIMIT 1", userID)
+	var site models.ConnectedSite
+	var lastPing sql.NullTime
+	err := row.Scan(&site.ID, &site.UserID, &site.Domain, &site.APIKey, &site.IsConnected, &lastPing, &site.CreatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if lastPing.Valid {
+		site.LastPingAt = &lastPing.Time
+	}
+	return &site, nil
+}
+
+// SaveConnectedSite creates or updates a connected site record for a user
+func SaveConnectedSite(userID int, domain, apiKey string) (*models.ConnectedSite, error) {
+	existing, err := GetConnectedSiteByUser(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if existing != nil {
+		_, err := DB.Exec("UPDATE connected_sites SET domain = $1, api_key = $2, is_connected = TRUE, last_ping_at = CURRENT_TIMESTAMP WHERE id = $3", domain, apiKey, existing.ID)
+		if err != nil {
+			return nil, err
+		}
+		return GetConnectedSiteByUser(userID)
+	}
+
+	var siteID int
+	err = DB.QueryRow("INSERT INTO connected_sites (user_id, domain, api_key, is_connected, last_ping_at) VALUES ($1, $2, $3, TRUE, CURRENT_TIMESTAMP) RETURNING id", userID, domain, apiKey).Scan(&siteID)
+	if err != nil {
+		return nil, err
+	}
+	return GetConnectedSiteByUser(userID)
+}
+
+// VerifyConnectedSiteByKey marks a site connected and updates last_ping_at when a valid API key event arrives
+func VerifyConnectedSiteByKey(apiKey string) (bool, error) {
+	res, err := DB.Exec("UPDATE connected_sites SET is_connected = TRUE, last_ping_at = CURRENT_TIMESTAMP WHERE api_key = $1", apiKey)
+	if err != nil {
+		return false, err
+	}
+	affected, _ := res.RowsAffected()
+	return affected > 0, nil
+}
+
+// DisconnectSiteByUser marks the user's connected site target as disconnected
+func DisconnectSiteByUser(userID int) error {
+	_, err := DB.Exec("UPDATE connected_sites SET is_connected = FALSE WHERE user_id = $1", userID)
+	return err
+}
+
+// GetConnectedSiteByKey retrieves connected site metadata by API key
+func GetConnectedSiteByKey(apiKey string) (*models.ConnectedSite, error) {
+	var site models.ConnectedSite
+	var lastPing sql.NullTime
+	err := DB.QueryRow("SELECT id, user_id, domain, api_key, is_connected, last_ping_at, created_at FROM connected_sites WHERE api_key = $1", apiKey).Scan(
+		&site.ID,
+		&site.UserID,
+		&site.Domain,
+		&site.APIKey,
+		&site.IsConnected,
+		&lastPing,
+		&site.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if lastPing.Valid {
+		site.LastPingAt = &lastPing.Time
+	}
+	return &site, nil
+}
+
+// UpdateSitePingTimestamp updates the last_ping_at timestamp for a connected site
+func UpdateSitePingTimestamp(siteID int) error {
+	_, err := DB.Exec("UPDATE connected_sites SET last_ping_at = CURRENT_TIMESTAMP WHERE id = $1", siteID)
+	return err
+}
+
+// InsertSingleLogEntry saves a single HTTP log entry into PostgreSQL (sessionID can be nil for external ingest)
+func InsertSingleLogEntry(entry models.LogEntry, sessionID *int) error {
+	var sessID interface{} = nil
+	if sessionID != nil && *sessionID > 0 {
+		sessID = *sessionID
+	}
+	_, err := DB.Exec(`
+		INSERT INTO logs (ip, timestamp, method, endpoint, protocol, status, bytes, referrer, user_agent, response_time, session_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	`, entry.IP, entry.Timestamp, entry.Method, entry.Endpoint, entry.Protocol, entry.Status, entry.Bytes, entry.Referrer, entry.UserAgent, entry.ResponseTime, sessID)
+	return err
+}
+
+// GetRecentLogs fetches the N most recent log entries for feed hydration
+func GetRecentLogs(sessionID *int, startDate *time.Time, endDate *time.Time, limit int) ([]models.LogEntry, error) {
+	whereClause, args := buildWhereClause(sessionID, startDate, endDate)
+	if limit <= 0 {
+		limit = 100
+	}
+	query := fmt.Sprintf(`
+		SELECT id, ip, timestamp, method, endpoint, protocol, status, bytes, referrer, user_agent, response_time, session_id
+		FROM logs
+		%s
+		ORDER BY timestamp DESC
+		LIMIT %d
+	`, whereClause, limit)
+
+	rows, err := DB.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query recent logs: %w", err)
+	}
+	defer rows.Close()
+
+	var logs []models.LogEntry
+	for rows.Next() {
+		var logEntry models.LogEntry
+		var sessID sql.NullInt64
+		err := rows.Scan(
+			&logEntry.ID,
+			&logEntry.IP,
+			&logEntry.Timestamp,
+			&logEntry.Method,
+			&logEntry.Endpoint,
+			&logEntry.Protocol,
+			&logEntry.Status,
+			&logEntry.Bytes,
+			&logEntry.Referrer,
+			&logEntry.UserAgent,
+			&logEntry.ResponseTime,
+			&sessID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan log entry: %w", err)
+		}
+		if sessID.Valid {
+			idVal := int(sessID.Int64)
+			logEntry.SessionID = &idVal
+		}
+		logs = append(logs, logEntry)
+	}
+
+	return logs, nil
+}

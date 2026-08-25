@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -38,11 +39,11 @@ func main() {
 	// 3. Set up the Gin router
 	router := gin.Default()
 
-	// Enable CORS for frontend applications
+	// Enable CORS for frontend & external developer applications
 	router.Use(cors.New(cors.Config{
 		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "OPTIONS", "PUT", "DELETE"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-API-Key", "x-api-key"},
 		AllowCredentials: true,
 	}))
 
@@ -53,13 +54,24 @@ func main() {
 	hub := internal.NewHub()
 	go hub.Run()
 
-	// Middleware to broadcast all live incoming HTTP requests to WebSocket clients
+	// Middleware to broadcast external incoming HTTP requests to WebSocket clients
 	router.Use(func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
 
-		// Do not broadcast the WebSocket connection handshakes or internal simulate calls to prevent duplicates
-		if strings.HasPrefix(c.Request.URL.Path, "/api/logs/stream") || c.Request.URL.Path == "/api/simulate" {
+		// Ignore all internal GoLog dashboard infrastructure routes so internal stats/auth queries aren't logged
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/api/stats") ||
+			strings.HasPrefix(path, "/api/logs") ||
+			strings.HasPrefix(path, "/api/auth") ||
+			strings.HasPrefix(path, "/api/sessions") ||
+			strings.HasPrefix(path, "/api/site") ||
+			path == "/api/register" ||
+			path == "/api/login" ||
+			path == "/api/upload" ||
+			path == "/api/simulate" ||
+			path == "/api/ingest" ||
+			path == "/ping" {
 			return
 		}
 
@@ -164,9 +176,231 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"message": "Simulated log broadcasted"})
 	})
 
-	// GET WebSocket Log Streaming Endpoint (JWT protected)
-	router.GET("/api/logs/stream", middleware.AuthRequired(), func(c *gin.Context) {
+	// GET WebSocket Log Streaming Endpoint (Live Dashboard & Event Subscribers)
+	router.GET("/api/logs/stream", func(c *gin.Context) {
 		internal.ServeWs(hub, c)
+	})
+
+	getUserID := func(c *gin.Context) (int, error) {
+		username := c.GetString("username")
+		if username == "" {
+			return 0, fmt.Errorf("missing username in context")
+		}
+		user, err := database.GetUserByUsername(username)
+		if err != nil || user == nil {
+			return 0, fmt.Errorf("user not found")
+		}
+		return user.ID, nil
+	}
+
+	// GET Site Integration Config
+	router.GET("/api/site/config", middleware.AuthRequired(), func(c *gin.Context) {
+		userID, err := getUserID(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		site, err := database.GetConnectedSiteByUser(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch site config"})
+			return
+		}
+		if site == nil {
+			defaultKey := fmt.Sprintf("golog_live_key_%d", userID)
+			c.JSON(http.StatusOK, gin.H{
+				"domain":       "",
+				"api_key":      defaultKey,
+				"is_connected": false,
+				"last_ping_at": nil,
+			})
+			return
+		}
+		c.JSON(http.StatusOK, site)
+	})
+
+	// POST Save/Connect Site Target
+	router.POST("/api/site/connect", middleware.AuthRequired(), func(c *gin.Context) {
+		userID, err := getUserID(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		var reqBody struct {
+			Domain string `json:"domain"`
+			APIKey string `json:"api_key"`
+		}
+		if err := c.ShouldBindJSON(&reqBody); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid payload"})
+			return
+		}
+		if reqBody.APIKey == "" {
+			reqBody.APIKey = fmt.Sprintf("golog_live_%d_%d", userID, time.Now().UnixNano()%1000000)
+		}
+
+		site, err := database.SaveConnectedSite(userID, reqBody.Domain, reqBody.APIKey)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect site"})
+			return
+		}
+
+		payload, err := json.Marshal(gin.H{
+			"type": "site_status",
+			"data": gin.H{
+				"domain":       site.Domain,
+				"api_key":      site.APIKey,
+				"is_connected": true,
+			},
+		})
+		if err == nil {
+			hub.Broadcast <- payload
+		}
+
+		c.JSON(http.StatusOK, site)
+	})
+
+	// POST Disconnect Site Target
+	router.POST("/api/site/disconnect", middleware.AuthRequired(), func(c *gin.Context) {
+		userID, err := getUserID(c)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+
+		err = database.DisconnectSiteByUser(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to disconnect site"})
+			return
+		}
+
+		payload, err := json.Marshal(gin.H{
+			"type": "site_status",
+			"data": gin.H{
+				"is_connected": false,
+			},
+		})
+		if err == nil {
+			hub.Broadcast <- payload
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "Site disconnected successfully"})
+	})
+
+	// OPTIONS Preflight Handler for External Log Ingestion
+	router.OPTIONS("/api/ingest", func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Headers", "Content-Type, X-API-Key, x-api-key, Authorization")
+		c.Header("Access-Control-Allow-Methods", "POST, OPTIONS")
+		c.Status(http.StatusNoContent)
+	})
+
+	// POST External Project Log Ingestion Endpoint (for developer applications & services)
+	router.POST("/api/ingest", func(c *gin.Context) {
+		var reqBody struct {
+			APIKey       string `json:"api_key"`
+			IP           string `json:"ip"`
+			Method       string `json:"method"`
+			Endpoint     string `json:"endpoint"`
+			Status       int    `json:"status"`
+			Bytes        int    `json:"bytes"`
+			Referrer     string `json:"referrer"`
+			UserAgent    string `json:"user_agent"`
+			ResponseTime int    `json:"response_time"`
+			Timestamp    string `json:"timestamp"`
+		}
+
+		if err := c.ShouldBindJSON(&reqBody); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid log payload"})
+			return
+		}
+
+		apiKey := c.GetHeader("X-API-Key")
+		if apiKey == "" {
+			apiKey = c.Query("api_key")
+		}
+		if apiKey == "" {
+			apiKey = reqBody.APIKey
+		}
+
+		if apiKey == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Missing API key for log ingestion"})
+			return
+		}
+
+		// Gatekeeper: Verify site existence & active connection state
+		site, err := database.GetConnectedSiteByKey(apiKey)
+		if err != nil || site == nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid ingestion API key"})
+			return
+		}
+
+		if !site.IsConnected {
+			// If site is disconnected/offline, completely BLOCK and DROP incoming log payloads!
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":  "Site connection is currently disconnected/offline. Log ingestion blocked.",
+				"status": "disconnected",
+			})
+			return
+		}
+
+		// Site is active and connected: update ping timestamp
+		_ = database.UpdateSitePingTimestamp(site.ID)
+
+		if reqBody.IP == "" {
+			reqBody.IP = c.ClientIP()
+		}
+		if reqBody.UserAgent == "" {
+			reqBody.UserAgent = c.Request.UserAgent()
+		}
+		if reqBody.Timestamp == "" {
+			reqBody.Timestamp = time.Now().UTC().Format(time.RFC3339)
+		}
+		if reqBody.Method == "" {
+			reqBody.Method = "GET"
+		}
+		if reqBody.Status == 0 {
+			reqBody.Status = 200
+		}
+
+		// Persist ingested log entry into database
+		parsedTime, errTime := time.Parse(time.RFC3339, reqBody.Timestamp)
+		if errTime != nil {
+			parsedTime = time.Now().UTC()
+		}
+		logEntryObj := models.LogEntry{
+			IP:           reqBody.IP,
+			Method:       reqBody.Method,
+			Endpoint:     reqBody.Endpoint,
+			Protocol:     "HTTP/1.1",
+			Status:       reqBody.Status,
+			Timestamp:    parsedTime,
+			Bytes:        reqBody.Bytes,
+			Referrer:     reqBody.Referrer,
+			UserAgent:    reqBody.UserAgent,
+			ResponseTime: reqBody.ResponseTime,
+		}
+		_ = database.InsertSingleLogEntry(logEntryObj, nil)
+
+		// Broadcast to WebSocket subscribers in real time
+		payload, err := json.Marshal(gin.H{
+			"type": "log_entry",
+			"data": gin.H{
+				"ip":            reqBody.IP,
+				"method":        reqBody.Method,
+				"endpoint":      reqBody.Endpoint,
+				"status":        reqBody.Status,
+				"bytes":         reqBody.Bytes,
+				"referrer":      reqBody.Referrer,
+				"user_agent":    reqBody.UserAgent,
+				"response_time": reqBody.ResponseTime,
+				"timestamp":     reqBody.Timestamp,
+			},
+		})
+		if err == nil {
+			hub.Broadcast <- payload
+		}
+
+		c.JSON(http.StatusOK, gin.H{"message": "External log entry ingested successfully", "verified": true})
 	})
 
 	// --------------------------------------------------------
@@ -431,6 +665,18 @@ func main() {
 			return
 		}
 
+		c.JSON(http.StatusOK, logs)
+	})
+
+	// Get Recent Logs for Live Feed Hydration
+	router.GET("/api/logs/recent", middleware.AuthRequired(), func(c *gin.Context) {
+		sessionID, startDate, endDate := parseQueryParams(c)
+		logs, err := database.GetRecentLogs(sessionID, startDate, endDate, 100)
+		if err != nil {
+			log.Println("Error fetching recent logs:", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch recent logs"})
+			return
+		}
 		c.JSON(http.StatusOK, logs)
 	})
 

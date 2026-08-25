@@ -20,9 +20,10 @@ import {
 } from "recharts";
 import { useRouter } from "next/navigation";
 import WorldMap from "./components/WorldMap";
-import { useLogStream, type LogEntry } from "./hooks/useLogStream";
+import { type LogEntry } from "./hooks/useLogStream";
 import { useWebSocket, type WebSocketMessage } from "./hooks/useWebSocket";
 import LiveLogFeed, { type StreamedLogEntry } from "./components/LiveLogFeed";
+import ConnectWebsiteModal from "./components/ConnectWebsiteModal";
 
 // Use an environment variable for the API URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
@@ -570,19 +571,147 @@ export default function Home() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [isSimulatingTraffic, setIsSimulatingTraffic] = useState(false);
+
+  // Dynamic External Connection State & Integration Modal
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [lastExternalLogTime, setLastExternalLogTime] = useState<number | null>(null);
+  const [isExternalConnected, setIsExternalConnected] = useState(false);
+  const [siteConfig, setSiteConfig] = useState<{
+    id?: number;
+    domain: string;
+    api_key: string;
+    is_connected: boolean;
+    last_ping_at?: string | null;
+  } | null>(null);
+
+  const markExternalActivity = useCallback(() => {
+    const localConn = localStorage.getItem("golog_site_connected");
+    if (localConn === "false" || !siteConfig?.is_connected || !siteConfig?.domain) {
+      setIsExternalConnected(false);
+      return;
+    }
+    setLastExternalLogTime(Date.now());
+    setIsExternalConnected(true);
+  }, [siteConfig]);
+
+  const fetchSiteConfig = useCallback(() => {
+    const token = localStorage.getItem("golog_token");
+    if (!token) return;
+
+    fetch(`${API_BASE_URL}/api/site/config`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          setSiteConfig(data);
+          localStorage.setItem("golog_site_domain", data.domain || "");
+          localStorage.setItem("golog_site_key", data.api_key || "");
+          const isActivelyConnected = Boolean(data.is_connected && data.domain && data.domain.trim() !== "");
+          if (isActivelyConnected) {
+            localStorage.setItem("golog_site_connected", "true");
+            setIsExternalConnected(true);
+            setLastExternalLogTime(Date.now());
+          } else {
+            localStorage.setItem("golog_site_connected", "false");
+            setIsExternalConnected(false);
+            setLastExternalLogTime(null);
+          }
+        }
+      })
+      .catch((err) => console.error("Error fetching site config:", err));
+  }, []);
+
+  const handleSaveSite = async (domain: string, apiKey: string) => {
+    const token = localStorage.getItem("golog_token");
+    if (!token) return;
+
+    const res = await fetch(`${API_BASE_URL}/api/site/connect`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ domain, api_key: apiKey }),
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || "Failed to connect website domain");
+    }
+
+    const data = await res.json();
+    setSiteConfig(data);
+    localStorage.setItem("golog_site_domain", data.domain || "");
+    localStorage.setItem("golog_site_key", data.api_key || "");
+    localStorage.setItem("golog_site_connected", "true");
+    setIsExternalConnected(true);
+    setLastExternalLogTime(Date.now());
+  };
+
+  const handleDisconnectSite = async () => {
+    try {
+      const token = localStorage.getItem("golog_token") || localStorage.getItem("token");
+      if (token) {
+        await fetch(`${API_BASE_URL}/api/site/disconnect`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }).catch((err) => console.error("Error disconnecting site backend:", err));
+      }
+    } finally {
+      setSiteConfig((prev) => (prev ? { ...prev, is_connected: false } : null));
+      localStorage.setItem("golog_site_connected", "false");
+      setIsExternalConnected(false);
+      setLastExternalLogTime(null);
+    }
+  };
+
+  const handleSendTestPing = async (apiKey: string, domain: string) => {
+    const token = localStorage.getItem("golog_token");
+    const res = await fetch(`${API_BASE_URL}/api/ingest`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": apiKey,
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        api_key: apiKey,
+        ip: "203.0.113.195",
+        method: "POST",
+        endpoint: "/api/v1/verification-handshake",
+        status: 200,
+        bytes: 1024,
+        response_time: 28,
+        user_agent: "GoLog Verification Agent/1.0",
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Failed to send verification test ping");
+    }
+
+    markExternalActivity();
+    localStorage.setItem("golog_site_connected", "true");
+    setSiteConfig((prev) => (prev ? { ...prev, is_connected: true, last_ping_at: new Date().toISOString() } : null));
+  };
 
   useEffect(() => {
-    if (!isSimulatingTraffic) return;
-    const interval = setInterval(() => {
-      fetch(`${API_BASE_URL}/api/simulate`, { method: "POST" }).catch(() => {});
-    }, 800);
-    return () => clearInterval(interval);
-  }, [isSimulatingTraffic]);
+    if (siteConfig) {
+      if (siteConfig.is_connected && siteConfig.domain && siteConfig.domain.trim() !== "") {
+        setIsExternalConnected(true);
+      } else {
+        setIsExternalConnected(false);
+      }
+    }
+  }, [siteConfig]);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    fetchSiteConfig();
+  }, [fetchSiteConfig]);
 
   // Fetch Sessions list
   const fetchSessions = useCallback(() => {
@@ -692,6 +821,52 @@ export default function Home() {
       .catch((err) => console.error("Error fetching error logs:", err));
   }, [selectedSessionID, getDateQuery, errorLogsPage, errorLogsLimit]);
 
+  const handleClearLiveFeed = useCallback(() => {
+    sessionStorage.setItem("golog_feed_cleared_at", Date.now().toString());
+    setLiveFeedLogs([]);
+  }, []);
+
+  // Fetch Recent Logs for Live Feed Hydration on Page Load/Refresh
+  const fetchRecentLogsData = useCallback(() => {
+    const token = localStorage.getItem("golog_token");
+    if (!token) return;
+
+    const sessionParam = selectedSessionID !== null ? `session_id=${selectedSessionID}` : "";
+    const dateParam = getDateQuery();
+    const combinedParams = [sessionParam, dateParam.replace(/^&/, "")].filter(Boolean).join("&");
+    const queryStr = combinedParams ? `?${combinedParams}` : "";
+
+    const clearedAtStr = sessionStorage.getItem("golog_feed_cleared_at");
+    const clearedAt = clearedAtStr ? parseInt(clearedAtStr, 10) : 0;
+
+    fetch(`${API_BASE_URL}/api/logs/recent${queryStr}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const formatted: StreamedLogEntry[] = data
+            .map((item: any) => ({
+              ip: item.ip || "0.0.0.0",
+              method: item.method || "GET",
+              endpoint: item.endpoint || "/",
+              status: item.status || 200,
+              bytes: item.bytes || 0,
+              referrer: item.referrer || "-",
+              user_agent: item.user_agent || "-",
+              response_time: item.response_time || 0,
+              timestamp: item.timestamp ? new Date(item.timestamp).toISOString() : new Date().toISOString(),
+            }))
+            .filter((item: StreamedLogEntry) => {
+              if (!clearedAt) return true;
+              return item.timestamp ? new Date(item.timestamp).getTime() > clearedAt : false;
+            });
+          setLiveFeedLogs(formatted.reverse());
+        }
+      })
+      .catch((err) => console.error("Error hydrating recent logs for live feed:", err));
+  }, [selectedSessionID, getDateQuery]);
+
   // Trigger data loading
   useEffect(() => {
     fetchSessions();
@@ -699,83 +874,12 @@ export default function Home() {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [fetchDashboardData]);
+    fetchRecentLogsData();
+  }, [fetchDashboardData, fetchRecentLogsData]);
 
   useEffect(() => {
     fetchErrorLogsData();
   }, [fetchErrorLogsData]);
-
-  // Live WebSocket Log Streaming Hook Integration
-  const handleLiveLogReceived = useCallback((newLog: LogEntry) => {
-    // 1. Stat Cards: Total Requests, Bandwidth, Error Rate, Unique IPs
-    if (newLog.ip) {
-      uniqueIPsSetRef.current.add(newLog.ip);
-    }
-
-    setOverview((prev) => {
-      if (!prev) {
-        return {
-          total_requests: 1,
-          unique_ips: uniqueIPsSetRef.current.size || 1,
-          error_rate: newLog.status >= 400 ? 1 : 0,
-          total_bytes: newLog.bytes || 0,
-        };
-      }
-      const newTotal = prev.total_requests + 1;
-      const isError = newLog.status >= 400;
-      const prevErrors = Math.round(prev.error_rate * prev.total_requests);
-      const newErrorRate = (prevErrors + (isError ? 1 : 0)) / newTotal;
-
-      return {
-        ...prev,
-        total_requests: newTotal,
-        unique_ips: Math.max(prev.unique_ips || 0, uniqueIPsSetRef.current.size),
-        total_bytes: prev.total_bytes + (newLog.bytes || 0),
-        error_rate: newErrorRate,
-      };
-    });
-
-    // 2. Traffic Over Time Graph (minute-level resolution)
-    if (newLog.timestamp) {
-      const logDate = new Date(newLog.timestamp);
-      logDate.setSeconds(0, 0);
-      const timeKey = logDate.toISOString();
-
-      setTraffic((prev) => {
-        const idx = prev.findIndex((t) => t.hour === timeKey);
-        if (idx >= 0) {
-          const updated = [...prev];
-          updated[idx] = { ...updated[idx], count: updated[idx].count + 1 };
-          return updated;
-        } else {
-          return [...prev, { hour: timeKey, count: 1 }];
-        }
-      });
-    }
-
-    // 3. Status Codes Breakdown
-    if (newLog.status) {
-      setStatusCodes((prev) => {
-        const idx = prev.findIndex((s) => s.status === newLog.status);
-        if (idx >= 0) {
-          const updated = [...prev];
-          updated[idx] = { ...updated[idx], count: updated[idx].count + 1 };
-          return updated;
-        } else {
-          return [...prev, { status: newLog.status, count: 1 }].sort((a, b) => a.status - b.status);
-        }
-      });
-    }
-
-    // 4. Error Logs Stream
-    if (newLog.status >= 400) {
-      setErrorLogs((prev) => [newLog, ...prev.slice(0, 49)]);
-    }
-  }, []);
-
-  const { connected: isLiveStreamConnected } = useLogStream({
-    onLogReceived: handleLiveLogReceived,
-  });
 
   // WebSocket Token & State
   const [wsToken, setWsToken] = useState<string | null>(null);
@@ -788,11 +892,29 @@ export default function Home() {
 
   // Handle incoming WebSocket messages (type: "log_entry" and "stats_update")
   const handleWsMessage = useCallback((msg: WebSocketMessage) => {
+    // If the website status is 'Offline' or disconnected, strictly drop incoming stream messages
+    const isConn = localStorage.getItem("golog_site_connected");
+    if (isConn === "false" || (siteConfig && !siteConfig.is_connected)) {
+      setIsExternalConnected(false);
+      return;
+    }
+
+    if (msg.type === "site_status" && msg.data) {
+      if (msg.data.is_connected === false) {
+        setSiteConfig((prev) => (prev ? { ...prev, is_connected: false } : null));
+        localStorage.setItem("golog_site_connected", "false");
+        setIsExternalConnected(false);
+        setLastExternalLogTime(null);
+        return;
+      }
+    }
+
     if (msg.type === "log_entry" && msg.data) {
       const newLog: StreamedLogEntry = msg.data;
+      markExternalActivity();
 
-      // 1. Append to local live log feed (keep last 100 entries in state)
-      setLiveFeedLogs((prev) => [...prev.slice(-99), newLog]);
+      // 1. Prepend to local live log feed (keep last 100 entries in state)
+      setLiveFeedLogs((prev) => [newLog, ...prev.slice(0, 99)]);
 
       // 1. Unique IP Tracking & Overview Stat Cards
       if (newLog.ip) {
@@ -884,7 +1006,7 @@ export default function Home() {
         total_bytes: total_bytes ?? prev?.total_bytes ?? 0,
       }));
     }
-  }, []);
+  }, [markExternalActivity, siteConfig]);
 
   // useWebSocket Custom Hook Integration
   const { isConnected: isWsConnected, lastMessage: wsLastMessage, retryCount: wsRetryCount } = useWebSocket(
@@ -1047,40 +1169,56 @@ export default function Home() {
 
                 {/* Actions: Session Select, Hidden File Input, Upload Button */}
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* Connection Status Indicator */}
+                  {/* Dynamic External Connection Status Indicator */}
                   {!wsToken ? (
                     <div className="flex items-center gap-2 bg-gray-500/10 border border-gray-500/30 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono font-bold">
                       <span>🔴 Not authenticated</span>
                     </div>
-                  ) : isWsConnected ? (
-                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                  ) : isExternalConnected && isWsConnected ? (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.25)] transition">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                       </span>
-                      <span>🟢 Live</span>
+                      <span>🟢 Live {siteConfig?.domain ? `(${siteConfig.domain})` : ""}</span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-xs text-rose-400 font-mono font-bold">
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
+                    <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-xs text-rose-400 font-mono font-bold transition">
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500/80" />
                       <span>
-                        🔴 Offline {wsRetryCount > 0 ? `(Reconnecting... attempt ${wsRetryCount})` : ""}
+                        🔴 Offline {wsRetryCount > 0 && !isWsConnected ? `(Reconnecting... attempt ${wsRetryCount})` : ""}
                       </span>
                     </div>
                   )}
 
-                  {/* Traffic Simulation Toggle Button */}
-                  <button
-                    type="button"
-                    onClick={() => setIsSimulatingTraffic((prev) => !prev)}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-mono font-bold border transition ${
-                      isSimulatingTraffic
-                        ? "bg-amber-500/20 border-amber-500/50 text-amber-300 animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.3)]"
-                        : "bg-cyber-card border-cyber-border text-gray-300 hover:text-white hover:border-cyber-purple/50 shadow-sm"
-                    }`}
-                  >
-                    {isSimulatingTraffic ? "⚡ Stop Traffic Sim" : "⚡ Simulate Traffic"}
-                  </button>
+                  {/* Connect or Disconnect Website Action Button */}
+                  {isExternalConnected && isWsConnected ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm("Are you sure you want to disconnect your website from GoLog?")) {
+                          handleDisconnectSite();
+                        }
+                      }}
+                      className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-mono font-bold bg-rose-500/10 border border-rose-500/50 text-rose-300 hover:bg-rose-500/20 hover:border-rose-400 transition shadow-[0_0_12px_rgba(244,63,94,0.2)] cursor-pointer"
+                    >
+                      <svg className="h-4 w-4 text-rose-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                      </svg>
+                      <span>Disconnect Website</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsConnectModalOpen(true)}
+                      className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-mono font-bold bg-cyber-card border border-cyber-purple/60 text-white hover:bg-cyber-purple/20 hover:border-cyber-purple transition shadow-[0_0_12px_rgba(137,81,255,0.25)] cursor-pointer"
+                    >
+                      <svg className="h-4 w-4 text-cyber-cyan shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      <span>Connect Website</span>
+                    </button>
+                  )}
 
                   {/* Time Range Filter Dropdown */}
                   <div className="relative">
@@ -1316,8 +1454,8 @@ export default function Home() {
                 <div className="lg:col-span-2">
                   <LiveLogFeed
                     logs={liveFeedLogs}
-                    onClear={() => setLiveFeedLogs([])}
-                    isConnected={isWsConnected}
+                    onClear={handleClearLiveFeed}
+                    isConnected={isExternalConnected && isWsConnected}
                   />
                 </div>
 
@@ -1547,17 +1685,18 @@ export default function Home() {
                     <div className="flex items-center gap-2 bg-gray-500/10 border border-gray-500/30 rounded-lg px-3 py-2 text-xs text-gray-400 font-mono font-bold">
                       <span>🔴 Not authenticated</span>
                     </div>
-                  ) : isWsConnected ? (
-                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+                  ) : isExternalConnected && isWsConnected ? (
+                    <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-3 py-2 text-xs text-emerald-400 font-mono font-bold shadow-[0_0_12px_rgba(16,185,129,0.25)]">
                       <span className="relative flex h-2 w-2">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                       </span>
-                      <span>🟢 Live Streaming</span>
+                      <span>🟢 Live {siteConfig?.domain ? `(${siteConfig.domain})` : ""}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-xs text-rose-400 font-mono font-bold">
-                      <span>🔴 Disconnected</span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500/80" />
+                      <span>🔴 Offline</span>
                     </div>
                   )}
 
@@ -2082,6 +2221,15 @@ export default function Home() {
             </div>
           )}
         </main>
+
+        <ConnectWebsiteModal
+          isOpen={isConnectModalOpen}
+          onClose={() => setIsConnectModalOpen(false)}
+          siteConfig={siteConfig}
+          onSaveSite={handleSaveSite}
+          onDisconnectSite={handleDisconnectSite}
+          onSendTestPing={handleSendTestPing}
+        />
     </div>
   );
 }

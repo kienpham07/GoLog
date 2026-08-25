@@ -54,10 +54,13 @@ export function useLogStream(options: UseLogStreamOptions = {}) {
 
       ws.onmessage = (event) => {
         try {
-          const log: LogEntry = JSON.parse(event.data);
-          setLatestLog(log);
-          if (onLogReceivedRef.current) {
-            onLogReceivedRef.current(log);
+          const raw = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+          const log: LogEntry = (raw && raw.type === "log_entry" && raw.data) ? raw.data : raw;
+          if (log && (log.endpoint || log.ip)) {
+            setLatestLog(log);
+            if (onLogReceivedRef.current) {
+              onLogReceivedRef.current(log);
+            }
           }
         } catch (e) {
           console.error("Error parsing WebSocket log message:", e);

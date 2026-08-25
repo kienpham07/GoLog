@@ -37,10 +37,10 @@ export default function LiveLogFeed({ logs, onClear, isConnected }: LiveLogFeedP
 
   const displayedLogs = isPaused ? frozenLogs : logs;
 
-  // Auto-scroll to bottom when new logs arrive (if not paused)
+  // Scroll to top when prepended new logs arrive (if not paused)
   useEffect(() => {
     if (!isPaused && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      containerRef.current.scrollTop = 0;
     }
   }, [displayedLogs, isPaused]);
 
