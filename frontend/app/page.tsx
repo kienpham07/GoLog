@@ -601,7 +601,14 @@ export default function Home() {
     fetch(`${API_BASE_URL}/api/site/config`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res.status === 401) {
+          localStorage.removeItem("golog_token");
+          router.push("/login");
+          return null;
+        }
+        return res.ok ? res.json() : null;
+      })
       .then((data) => {
         if (data) {
           setSiteConfig(data);
@@ -620,7 +627,7 @@ export default function Home() {
         }
       })
       .catch((err) => console.error("Error fetching site config:", err));
-  }, []);
+  }, [router]);
 
   const handleSaveSite = async (domain: string, apiKey: string) => {
     const token = localStorage.getItem("golog_token");
@@ -636,7 +643,11 @@ export default function Home() {
     });
 
     if (!res.ok) {
-      const errData = await res.json();
+      if (res.status === 401) {
+        localStorage.removeItem("golog_token");
+        router.push("/login");
+      }
+      const errData = await res.json().catch(() => ({}));
       throw new Error(errData.error || "Failed to connect website domain");
     }
 
@@ -2134,8 +2145,8 @@ export default function Home() {
                     <h3 className="text-base font-bold text-white mb-1 shrink-0">Country Leaderboard</h3>
                     <p className="text-xs text-gray-400 font-mono mb-4 shrink-0">Traffic origins ranked by request volume</p>
 
-                    <div className="overflow-x-auto flex-1 flex flex-col min-h-0">
-                      <table className="w-full h-full text-left border-collapse text-xs">
+                    <div className="overflow-x-auto flex-1 min-h-0">
+                      <table className="w-full text-left border-collapse text-xs">
                         <thead>
                           <tr className="border-b border-cyber-border text-gray-400 font-mono shrink-0">
                             <th className="pb-3 font-semibold w-12">Rank</th>
@@ -2174,9 +2185,9 @@ export default function Home() {
                                     <span>{item.country}</span>
                                   </td>
                                   <td className="py-2.5 font-mono text-right text-white">
-                                    <div className="flex flex-col items-end">
+                                    <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                                       <span className="font-bold">{formatCount(item.count)}</span>
-                                      <span className="text-[9px] text-gray-400 font-normal">{percentage}%</span>
+                                      <span className="text-[11px] text-gray-400 font-normal">({percentage}%)</span>
                                     </div>
                                   </td>
                                 </tr>

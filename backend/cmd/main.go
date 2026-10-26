@@ -182,6 +182,11 @@ func main() {
 	})
 
 	getUserID := func(c *gin.Context) (int, error) {
+		if uid, exists := c.Get("user_id"); exists {
+			if id, ok := uid.(int); ok {
+				return id, nil
+			}
+		}
 		username := c.GetString("username")
 		if username == "" {
 			return 0, fmt.Errorf("missing username in context")

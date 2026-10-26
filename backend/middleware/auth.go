@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/kienpham07/GoLog/backend/database"
 	"github.com/kienpham07/GoLog/backend/utils"
 )
 
@@ -41,10 +42,16 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 4.5 Store username in context for handlers to use
+		// 4.5 Store username and verify user exists in database
 		if claims, ok := token.Claims.(jwt.MapClaims); ok {
 			if username, ok := claims["username"].(string); ok {
+				user, err := database.GetUserByUsername(username)
+				if err != nil || user == nil {
+					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "User does not exist or session expired. Please log in again."})
+					return
+				}
 				c.Set("username", username)
+				c.Set("user_id", user.ID)
 			}
 		}
 
